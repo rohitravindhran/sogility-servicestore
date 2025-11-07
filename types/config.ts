@@ -8,6 +8,7 @@ export interface Business {
   allowedHosts: string[];
   customUserAgent?: string;
   status?: 'active' | 'disabled';
+  businessId?: string;
 }
 
 export interface ConfigValidationResult {

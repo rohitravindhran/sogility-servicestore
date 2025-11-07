@@ -1,15 +1,15 @@
-import React, { useRef, useState, useEffect } from 'react';
+import * as Linking from 'expo-linking';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  StyleSheet,
+  Alert,
   BackHandler,
   Platform,
-  Alert,
+  StyleSheet,
+  View,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
-import * as Linking from 'expo-linking';
-import { Business } from '../types/config';
 import { ConfigService } from '../services/ConfigService';
+import { Business } from '../types/config';
 
 interface WebViewShellProps {
   business: Business;
@@ -231,13 +231,39 @@ export default function WebViewShell({
         onMessage={onMessage}
         onNavigationStateChange={handleNavigationStateChange}
         onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
-        onLoadStart={onLoadStart}
-        onLoadEnd={onLoadEnd}
-        onError={onError}
+        onLoadStart={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.log('WebView load started:', nativeEvent.url);
+          onLoadStart?.();
+        }}
+        onLoadEnd={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.log('WebView load ended:', nativeEvent.url, 'Success:', !nativeEvent.title?.includes('Error'));
+          onLoadEnd?.();
+        }}
+        onError={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.error('WebView error:', {
+            url: nativeEvent.url,
+            code: nativeEvent.code,
+            description: nativeEvent.description,
+            canGoBack: nativeEvent.canGoBack,
+            canGoForward: nativeEvent.canGoForward
+          });
+          onError?.(nativeEvent);
+        }}
         onHttpError={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
-          console.error('WebView HTTP error:', nativeEvent);
+          console.error('WebView HTTP error:', {
+            url: nativeEvent.url,
+            statusCode: nativeEvent.statusCode,
+            description: nativeEvent.description
+          });
           onError?.(nativeEvent);
+        }}
+        onLoadProgress={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.log('WebView load progress:', `${Math.round(nativeEvent.progress * 100)}%`, nativeEvent.url);
         }}
         startInLoadingState={true}
         scalesPageToFit={true}

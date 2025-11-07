@@ -23,7 +23,8 @@
       "api.stripe.com"
     ],
     "customUserAgent": "SogilityApp/1.0",
-    "status": "active"
+    "status": "active",
+    "businessId":"25927"
   },
   {
     "id": "hana",

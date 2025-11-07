@@ -1,20 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Image,
-  ActivityIndicator,
-  Alert,
-  SafeAreaView,
-} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Business } from '../types/config';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { ConfigService } from '../services/ConfigService';
 import { StorageService } from '../services/StorageService';
-import { getBuildBusinessId, hasBuildBusinessId, getAppDisplayName } from '../utils/buildConfig';
+import { Business } from '../types/config';
+import { getAppDisplayName, getBuildBusinessId, hasBuildBusinessId } from '../utils/buildConfig';
 
 interface BusinessSelectionScreenProps {
   onBusinessSelected: (business: Business) => void;
@@ -24,6 +24,7 @@ export default function BusinessSelectionScreen({ onBusinessSelected }: Business
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const configService = ConfigService.getInstance();
 
   useEffect(() => {
     loadBusinesses();
@@ -33,12 +34,54 @@ export default function BusinessSelectionScreen({ onBusinessSelected }: Business
     try {
       setLoading(true);
       setError(null);
-      const configService = ConfigService.getInstance();
+      // Load configuration (with built-in fallback to bundled config)
       const businessList = await configService.loadConfig();
+      
+      if (businessList.length === 0) {
+        throw new Error('No businesses found in configuration');
+      }
+      
       setBusinesses(businessList);
+      
+      // Log which config source was used
+      const configSource = configService.getConfigSource();
+      console.log(`✓ Configuration loaded from ${configSource} source`);
+      
     } catch (err) {
       console.error('Failed to load businesses:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load businesses');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load businesses';
+      
+      // Provide user-friendly error messages
+      if (errorMessage.includes('Network request failed')) {
+        setError('Unable to connect to configuration server. Using offline mode.');
+      } else if (errorMessage.includes('timeout')) {
+        setError('Connection timeout. Please check your internet connection.');
+      } else if (errorMessage.includes('No businesses found')) {
+        setError('No business configurations available. Please contact support.');
+      } else {
+        setError(errorMessage);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshConfiguration = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Force refresh from remote (will fall back to bundled if remote fails)
+      const businessList = await configService.refreshConfig();
+      setBusinesses(businessList);
+      
+      const configSource = configService.getConfigSource();
+      console.log(`✓ Configuration refreshed from ${configSource} source`);
+      
+    } catch (err) {
+      console.error('Failed to refresh configuration:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to refresh configuration';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -98,6 +141,9 @@ export default function BusinessSelectionScreen({ onBusinessSelected }: Business
           <TouchableOpacity style={styles.retryButton} onPress={loadBusinesses}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.refreshButton} onPress={refreshConfiguration}>
+            <Text style={styles.refreshButtonText}>Refresh Config</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -122,6 +168,9 @@ export default function BusinessSelectionScreen({ onBusinessSelected }: Business
           </Text>
           <TouchableOpacity style={styles.retryButton} onPress={loadBusinesses}>
             <Text style={styles.retryButtonText}>Reload Configuration</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.refreshButton} onPress={refreshConfiguration}>
+            <Text style={styles.refreshButtonText}>Force Refresh</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -251,6 +300,18 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   retryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  refreshButton: {
+    backgroundColor: '#34495e',
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 12,
+  },
+  refreshButtonText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',

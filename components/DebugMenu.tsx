@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Modal,
-  SafeAreaView,
-  Alert,
-} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import {
+    Alert,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { Business } from '../types/config';
 
 interface DebugMenuProps {
@@ -18,6 +18,7 @@ interface DebugMenuProps {
   business: Business | null;
   onRefreshConfig: () => Promise<void>;
   onSwitchBusiness: () => void;
+  onLogout?: () => void;
 }
 
 interface LogEntry {
@@ -32,7 +33,8 @@ export default function DebugMenu({
   onClose, 
   business,
   onRefreshConfig,
-  onSwitchBusiness 
+  onSwitchBusiness,
+  onLogout
 }: DebugMenuProps) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -163,6 +165,18 @@ export default function DebugMenu({
                   Clear Logs
                 </Text>
               </TouchableOpacity>
+
+              {onLogout && (
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={onLogout}
+                >
+                  <Ionicons name="log-out-outline" size={20} color="#e67e22" />
+                  <Text style={[styles.actionButtonText, { color: '#e67e22' }]}>
+                    Logout
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 

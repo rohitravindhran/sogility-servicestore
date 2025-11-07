@@ -1,29 +1,34 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View } from 'react-native';
-import * as SplashScreen from 'expo-splash-screen';
-import * as Linking from 'expo-linking';
 import { Asset } from 'expo-asset';
+import * as Linking from 'expo-linking';
+import { useRouter } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
+import React, { useEffect, useRef, useState } from 'react';
+import { View } from 'react-native';
 import 'react-native-reanimated';
 
-import { Business } from '@/types/config';
+import AuthenticatedWebView from '@/components/AuthenticatedWebView';
+import BusinessSelectionScreen from '@/components/BusinessSelectionScreen';
+import DebugMenu from '@/components/DebugMenu';
+import OfflineErrorScreen from '@/components/OfflineErrorScreen';
+import ThemedHeader from '@/components/ThemedHeader';
 import { ConfigService } from '@/services/ConfigService';
 import { StorageService } from '@/services/StorageService';
+import { Business } from '@/types/config';
 import { getBuildBusinessId, hasBuildBusinessId } from '@/utils/buildConfig';
-import BusinessSelectionScreen from '@/components/BusinessSelectionScreen';
-import WebViewShell from '@/components/WebViewShell';
-import ThemedHeader from '@/components/ThemedHeader';
-import OfflineErrorScreen from '@/components/OfflineErrorScreen';
-import DebugMenu from '@/components/DebugMenu';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AuthContainer from './auth/AuthContainer';
+
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-type AppState = 'loading' | 'selecting' | 'webview' | 'error';
+type AppState = 'loading' | 'selecting' | 'auth' | 'webview' | 'error';
 
 export default function RootLayout() {
+  const router = useRouter();
   const [appState, setAppState] = useState<AppState>('loading');
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
+  const [authData, setAuthData] = useState<any>(null);
   const [error, setError] = useState<any>(null);
   const [isWebViewLoading, setIsWebViewLoading] = useState(false);
   const [showDebugMenu, setShowDebugMenu] = useState(false);
@@ -94,7 +99,14 @@ export default function RootLayout() {
       
       if (businessToSelect) {
         setSelectedBusiness(businessToSelect);
-        setAppState('webview');
+        // Check if user is already authenticated for this business
+        const existingAuth = await StorageService.getAuthData();
+        if (existingAuth && existingAuth.business?.id === businessToSelect.id) {
+          setAuthData(existingAuth);
+          setAppState('webview');
+        } else {
+          setAppState('auth');
+        }
       } else if (hasBuildBusinessId()) {
         // Build is configured for a specific business but business not found
         console.error(`Build configured business not found: ${buildBusinessId}`);
@@ -161,7 +173,15 @@ export default function RootLayout() {
       
       setSelectedBusiness(business);
       setError(null);
-      setAppState('webview');
+      
+      // Check if user is already authenticated for this business
+      const existingAuth = await StorageService.getAuthData();
+      if (existingAuth && existingAuth.business?.id === business.id) {
+        setAuthData(existingAuth);
+        setAppState('webview');
+      } else {
+        setAppState('auth');
+      }
     } catch (error) {
       console.error('Failed to select business:', error);
       setError(error);
@@ -175,10 +195,17 @@ export default function RootLayout() {
     setAppState('error');
   };
 
-  const handleRetry = () => {
+  const handleRetry = async () => {
     if (selectedBusiness) {
       setError(null);
-      setAppState('webview');
+      // Check authentication before going to webview
+      const existingAuth = await StorageService.getAuthData();
+      if (existingAuth && existingAuth.business?.id === selectedBusiness.id) {
+        setAuthData(existingAuth);
+        setAppState('webview');
+      } else {
+        setAppState('auth');
+      }
     } else {
       setAppState('selecting');
     }
@@ -209,9 +236,35 @@ export default function RootLayout() {
 
   const handleSwitchBusiness = async () => {
     await StorageService.clearSelectedBusinessId();
+    await StorageService.clearAuthData();
     setSelectedBusiness(null);
+    setAuthData(null);
     setShowDebugMenu(false);
     setAppState('selecting');
+  };
+
+  const handleAuthSuccess = (authenticationData: any) => {
+    setAuthData(authenticationData);
+    setError(null);
+    setAppState('webview');
+  };
+
+  const handleAuthBack = () => {
+    setSelectedBusiness(null);
+    setAppState('selecting');
+  };
+
+
+
+  const handleLogout = async () => {
+    await StorageService.clearAuthData();
+    setAuthData(null);
+    if (selectedBusiness) {
+      setAppState('auth');
+    } else {
+      setAppState('selecting');
+    }
+    setShowDebugMenu(false);
   };
 
   const handleHeaderLogoLongPress = () => {
@@ -232,16 +285,26 @@ export default function RootLayout() {
             onBusinessSelected={handleBusinessSelection}
           />
         );
+
+      case 'auth':
+        return selectedBusiness ? (
+          <AuthContainer
+            business={selectedBusiness}
+            onAuthSuccess={handleAuthSuccess}
+            onBack={handleAuthBack}
+          />
+        ) : null;
         
       case 'webview':
-        return selectedBusiness ? (
+        return selectedBusiness && authData ? (
           <SafeAreaView style={{ flex: 1 }}>
             {/* <ThemedHeader
               business={selectedBusiness}
               onLogoLongPress={handleHeaderLogoLongPress}
             /> */}
-            <WebViewShell
+            <AuthenticatedWebView
               business={selectedBusiness}
+              authData={authData}
               onError={handleWebViewError}
               onLoadStart={() => setIsWebViewLoading(true)}
               onLoadEnd={() => setIsWebViewLoading(false)}
@@ -284,6 +347,7 @@ export default function RootLayout() {
         business={selectedBusiness}
         onRefreshConfig={handleRefreshConfig}
         onSwitchBusiness={handleSwitchBusiness}
+        onLogout={authData ? handleLogout : undefined}
       />
     </View>
   );
