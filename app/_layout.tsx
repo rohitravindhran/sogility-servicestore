@@ -64,7 +64,7 @@ export default function RootLayout() {
         })
       );
       
-      // Check for business selection priority: build config > deep link > saved business
+      // Check for business selection priority: build config > deep link > saved business > default to sogility
       let businessToSelect: Business | null = null;
       
       // 1. Check for build-time business configuration (highest priority)
@@ -93,6 +93,15 @@ export default function RootLayout() {
         }
       }
       
+      // 4. Default to sogility business if no other selection (NEW: Skip business selection)
+      if (!businessToSelect) {
+        console.log('No business found, defaulting to sogility business');
+        businessToSelect = await configService.findBusiness('sogility');
+        if (!businessToSelect) {
+          console.warn('Default sogility business not found in config');
+        }
+      }
+      
       // Hide splash screen
       await SplashScreen.hideAsync();
       console.log('Splash screen hidden');
@@ -113,7 +122,10 @@ export default function RootLayout() {
         setError(new Error(`Configured business "${buildBusinessId}" not found`));
         setAppState('error');
       } else {
-        setAppState('selecting');
+        // Fallback: if sogility business not found, show error instead of selection
+        console.error('No businesses available including default sogility business');
+        setError(new Error('No businesses configured'));
+        setAppState('error');
       }
     } catch (error) {
       console.error('Failed to initialize app:', error);
