@@ -33,7 +33,7 @@ export const Strings = {
   offlineText: `Check your internet connection and try again.`,
   youAreoffline: `You're Offline`,
   tapToRetry: 'Tap to retry',
-  additional:'Additonal Details',
+  additional:'Additional Details',
   chooseBusiness:'Select Location',
   pickLocation:'USE YOUR CURRENT LOCATION',
   searchLocations :'Search Zip/Postal Code or city or state or Country'

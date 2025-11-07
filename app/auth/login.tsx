@@ -13,13 +13,14 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import InlineSignupForm from '../../components/auth/InlineSignupForm';
 import { useAuth } from './AuthContainer';
 
 // URL Constants
-const appDomainName = '.omnifyapp.com';
-const appDomainHost = 'https://app.omnifyapp.com';
-const base_url_api = 'https://api.omnifyapp.com/';
-const base_url_app = 'https://app.omnifyapp.com/';
+const appDomainName = '.getomnify.com';
+const appDomainHost = 'https://app.getomnify.com';
+const base_url_api = 'https://api.getomnify.com/';
+const base_url_app = 'https://app.getomnify.com/';
 
 const urls = {
   appDomainName,
@@ -65,6 +66,7 @@ export default function LoginScreen() {
   const [loginErrorMessage, setLoginErrorMessage] = useState('');
   const [userNotFound, setUserNotFound] = useState(false);
   const [otpSent, setOTPSent] = useState(false);
+  const [showSignup, setShowSignup] = useState(false);
 
   // Load business data on component mount (only if not provided by context)
   useEffect(() => {
@@ -128,6 +130,7 @@ export default function LoginScreen() {
 
     setLoginError(false);
     setUserNotFound(false);
+    setShowSignup(false);
 
     if (isUser) {
       await fetchCsrfToken(password, otp, otpSent);
@@ -199,7 +202,7 @@ export default function LoginScreen() {
             Alert.alert('Account Required', 'Please create an account to continue.');
           }
         } else {
-          Alert.alert('User Not Found', 'No account found with this email. Please sign up first.');
+          setShowSignup(true);
         }
       }
     } catch (error) {
@@ -214,7 +217,6 @@ export default function LoginScreen() {
     if (!business) return;
     
     setLoading(true);
-    setLoadingText('Getting CSRF token...');
 
     const baseUrl = business.storeUrl.replace(/\/home$/, '');
     const csrfUrl = `${baseUrl}/api/auth/csrf`;
@@ -356,19 +358,40 @@ export default function LoginScreen() {
   };
 
   const onBackPress = () => {
-    if (isUser) {
-      setIsUser(false);
-      setEmail('');
-      setOTPSent(false);
+    if (showSignup) {
+      setShowSignup(false);
       setLoginError(false);
-    } else {
-      // Use context callback if available, otherwise navigate
-      if (authContext?.onBack) {
-        authContext.onBack();
-      } else {
-        router.replace('/');
-      }
+      setLoginErrorMessage('');
     }
+  };
+
+  const handleSignupSuccess = (userData: any) => {
+    // Registration successful - handle login or navigation
+    setLoading(true);
+    setLoadingText('Signing in...');
+    
+    // For now, we'll just reset to login state
+    // In a production app, you might want to automatically log the user in
+    setTimeout(() => {
+      setShowSignup(false);
+      setLoading(false);
+      Alert.alert('Account Created', 'Your account has been created successfully. Please sign in with your credentials.');
+    }, 1500);
+  };
+
+  const handleNavigateToPassword = (userData: any) => {
+    // For now, since we don't have the setPassword screen in this architecture,
+    // we'll implement a simple inline registration process in the signup form
+    console.log('Navigate to password setup for:', userData);
+    
+    // The InlineSignupForm will handle the complete registration internally
+    // This is just a placeholder for potential future navigation
+  };
+
+  const handleBackToLogin = () => {
+    setShowSignup(false);
+    setLoginError(false);
+    setLoginErrorMessage('');
   };
 
   if (!business) {
@@ -384,14 +407,30 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerContainer}>
-        <TouchableOpacity onPress={onBackPress} style={styles.backButton}>
-          <Text style={styles.backButtonText}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Sign In to {business.displayName}</Text>
-        <Text style={styles.subtitle}>Access your account to continue</Text>
+        {showSignup && (
+          <TouchableOpacity onPress={onBackPress} style={styles.backButton}>
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+        )}
+        <Text style={styles.title}>
+          {showSignup ? `Sign Up for ${business.displayName}` : `Sign In to ${business.displayName}`}
+        </Text>
+        <Text style={styles.subtitle}>
+          {showSignup ? 'Create your account to continue' : 'Access your account to continue'}
+        </Text>
       </View>
 
-      <ScrollView style={styles.formContainer} keyboardShouldPersistTaps="handled">
+      {showSignup ? (
+        <InlineSignupForm
+          initialEmail={email}
+          business={business}
+          onSignupSuccess={handleSignupSuccess}
+          onBackToLogin={handleBackToLogin}
+          onNavigateToPassword={handleNavigateToPassword}
+          isLoading={isLoading}
+        />
+      ) : (
+        <ScrollView style={styles.formContainer} keyboardShouldPersistTaps="handled">
         <Text style={styles.inputLabel}>Email Address</Text>
         <TextInput
           placeholder="johndoe@acme.com"
@@ -459,13 +498,14 @@ export default function LoginScreen() {
 
         <TouchableOpacity 
           style={styles.signupButton}
-          onPress={() => router.push('./signup')}
+          onPress={() => setShowSignup(true)}
         >
           <Text style={styles.signupText}>
             Don't have an account? <Text style={styles.signupLink}>Sign up</Text>
           </Text>
         </TouchableOpacity>
       </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -483,6 +523,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     padding: 10,
     marginLeft: -10,
+    marginBottom: 10,
   },
   backButtonText: {
     fontSize: 24,

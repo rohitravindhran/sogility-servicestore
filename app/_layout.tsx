@@ -297,17 +297,14 @@ export default function RootLayout() {
         
       case 'webview':
         return selectedBusiness && authData ? (
-          <SafeAreaView style={{ flex: 1 }}>
-            {/* <ThemedHeader
-              business={selectedBusiness}
-              onLogoLongPress={handleHeaderLogoLongPress}
-            /> */}
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
             <AuthenticatedWebView
               business={selectedBusiness}
               authData={authData}
               onError={handleWebViewError}
               onLoadStart={() => setIsWebViewLoading(true)}
               onLoadEnd={() => setIsWebViewLoading(false)}
+              onLogout={handleLogout}
             />
           </SafeAreaView>
         ) : null;

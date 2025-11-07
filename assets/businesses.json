@@ -5,10 +5,12 @@
     "primaryColor": "#1E90FF",
     "secondaryColor": "#0D47A1",
     "logoUrl": "https://example.com/logos/sogility.png",
-    "storeUrl": "https://roartiger.omnifyapp.com/home",
+    "storeUrl": "https://demosojility.getomnify.com/home",
     "allowedHosts": [
       "roartiger.omnifyapp.com", 
       "app.omnifyapp.com", 
+      "app.getomnify.com", 
+      "demosojility.getomnify.com",
       "js.stripe.com", 
       "stripe.network", 
       "b.stripecdn.com",
@@ -20,11 +22,16 @@
       "m.stripe.com",
       "m.stripe.network",
       "hooks.stripe.com",
-      "api.stripe.com"
+      "api.stripe.com",
+      "hcaptcha.com",
+      "newassets.hcaptcha.com",
+      "accounts.hcaptcha.com",
+      "pst-issuer.hcaptcha.com",
+      "api.hcaptcha.com"
     ],
     "customUserAgent": "SogilityApp/1.0",
     "status": "active",
-    "businessId":"25927"
+    "businessId":"29103"
   },
   {
     "id": "hana",
