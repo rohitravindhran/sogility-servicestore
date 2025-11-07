@@ -1,12 +1,16 @@
 {
   "expo": {
-    "name": "sogility-servicestore",
+    "name": "Sogility",
     "slug": "sogility-servicestore",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "sogilityservicestore",
+    "icon": "./assets/images/sogility-logo.png",
+    "scheme": "myapp",
     "userInterfaceStyle": "automatic",
+    "deepLinking": {
+      "scheme": "myapp",
+      "autoVerify": true
+    },
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
@@ -30,12 +34,15 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/sogility-logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
           "dark": {
-            "backgroundColor": "#000000"
+            "image": "./assets/images/sogility-logo.png",
+            "imageWidth": 200,
+            "resizeMode": "contain",
+            "backgroundColor": "#ffffff"
           }
         }
       ]
@@ -43,6 +50,9 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "EXPO_PUBLIC_BUSINESS_ID": null
     }
   }
 }
