@@ -5,7 +5,7 @@
     "primaryColor": "#1E90FF",
     "secondaryColor": "#0D47A1",
     "logoUrl": "https://example.com/logos/sogility.png",
-    "storeUrl": "https://demosojility.getomnify.com/home",
+    "storeUrl": "https://demosojility.omnifyapp.com/home",
     "allowedHosts": [
       "roartiger.omnifyapp.com", 
       "app.omnifyapp.com", 
@@ -42,5 +42,39 @@
     "storeUrl": "https://hana.example.com/store",
     "allowedHosts": ["hana.example.com"],
     "status": "active"
+  },
+  {
+    "id": "nuvanta",
+    "displayName": "Nuvanta",
+    "primaryColor": "#1E90FF",
+    "secondaryColor": "#0D47A1",
+    "logoUrl": "https://example.com/logos/nuvanta.png",
+    "storeUrl": "https://roartiger.omnifyapp.com/home",
+    "allowedHosts": [
+      "roartiger.omnifyapp.com", 
+      "app.omnifyapp.com", 
+      "app.getomnify.com", 
+      "demosojility.getomnify.com",
+      "js.stripe.com", 
+      "stripe.network", 
+      "b.stripecdn.com",
+      "q.stripe.com",
+      "r.stripe.com",
+      "checkout.stripe.com",
+      "pay.stripe.com",
+      "connect.stripe.com",
+      "m.stripe.com",
+      "m.stripe.network",
+      "hooks.stripe.com",
+      "api.stripe.com",
+      "hcaptcha.com",
+      "newassets.hcaptcha.com",
+      "accounts.hcaptcha.com",
+      "pst-issuer.hcaptcha.com",
+      "api.hcaptcha.com"
+    ],
+    "customUserAgent": "NuvantaApp/1.0",
+    "status": "active",
+    "businessId":"25927"
   }
 ]

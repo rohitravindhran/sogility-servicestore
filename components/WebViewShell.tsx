@@ -17,8 +17,10 @@ import {
   getRouteData,
   WEBVIEW_INJECTION_SCRIPT
 } from '../utils/routeUtils';
+import ActionOverlay from './ActionOverlay';
 import BottomMenu from './BottomMenu';
 import NavHeader from './NavHeader';
+import ProgressBar from './ProgressBar';
 import SkeletonLoader from './SkeletonLoader';
 
 interface WebViewShellProps {
@@ -44,7 +46,14 @@ export default function WebViewShell({
   const [routeData, setRouteData] = useState(getRouteData(business.storeUrl));
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
+  const [actionLoading, setActionLoading] = useState<{[key: string]: boolean}>({});
+  const [actionError, setActionError] = useState<string | null>(null);
   const configService = ConfigService.getInstance();
+  
+  // Refs for timer cleanup
+  const skeletonTimeoutRef = useRef<number | null>(null);
 
   // Handle logout - clear auth data and redirect
   const handleLogout = async () => {
@@ -105,6 +114,45 @@ export default function WebViewShell({
       setCurrentUrl(business.storeUrl);
     };
   }, [currentUrl, routeData, business.storeUrl]);
+
+  // Debounced skeleton loading logic
+  useEffect(() => {
+    // Clear existing timeout
+    if (skeletonTimeoutRef.current) {
+      clearTimeout(skeletonTimeoutRef.current);
+      skeletonTimeoutRef.current = null;
+    }
+
+    if (isLoading) {
+      // Don't show skeleton on payment domains
+      if (isPaymentDomain(currentUrl)) {
+        console.log('Skipping skeleton on payment domain:', currentUrl);
+        setShowSkeleton(false);
+        return;
+      }
+
+      // Set timeout to show skeleton after 300ms
+      skeletonTimeoutRef.current = setTimeout(() => {
+        console.log('Showing skeleton after delay');
+        setShowSkeleton(true);
+      }, 300);
+    } else {
+      // Hide skeleton immediately when loading stops
+      setShowSkeleton(false);
+      // After first successful load, no longer initial load
+      if (isInitialLoad) {
+        setIsInitialLoad(false);
+      }
+    }
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (skeletonTimeoutRef.current) {
+        clearTimeout(skeletonTimeoutRef.current);
+        skeletonTimeoutRef.current = null;
+      }
+    };
+  }, [isLoading, currentUrl, isInitialLoad]);
 
   // Handle Android hardware back button
   useEffect(() => {
@@ -393,6 +441,33 @@ export default function WebViewShell({
           console.log('Logout message received from WebView');
           handleLogout();
           break;
+
+        case 'ACTION_START':
+          console.log('Action started:', data.action);
+          setActionLoading(prev => ({ ...prev, [data.action]: true }));
+          setActionError(null);
+          break;
+
+        case 'ACTION_END':
+          console.log('Action ended:', data.action, 'Reason:', data.reason);
+          setActionLoading(prev => {
+            const newState = { ...prev };
+            if (data.action) {
+              delete newState[data.action];
+            } else {
+              // Clear all if no specific action
+              return {};
+            }
+            return newState;
+          });
+          break;
+
+        case 'FETCH_DONE':
+        case 'XHR_DONE':
+          console.log('Network request completed:', data.type);
+          // Clear all action loading states when network activity completes
+          setActionLoading({});
+          break;
           
         default:
           console.log('Unknown message from WebView:', data);
@@ -599,8 +674,19 @@ export default function WebViewShell({
     return true;
   };
 
+  // Helper to check if any actions are loading
+  const hasActiveActions = Object.keys(actionLoading).length > 0;
+  const currentAction = Object.keys(actionLoading)[0] || 'booking';
+
   return (
     <View style={styles.container}>
+      {/* Progress Bar - shows during page loads */}
+      <ProgressBar
+        progress={loadProgress}
+        isVisible={isLoading}
+        showHeader={routeData.showHeader}
+      />
+
       {/* NavHeader - show based on route data */}
       {routeData.showHeader && (
         <NavHeader
@@ -632,12 +718,14 @@ export default function WebViewShell({
           const { nativeEvent } = syntheticEvent;
           console.log('WebView load started:', nativeEvent.url);
           setIsLoading(true);
+          setLoadProgress(0);
           onLoadStart?.();
         }}
         onLoadEnd={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
           console.log('WebView load ended:', nativeEvent.url, 'Success:', !nativeEvent.title?.includes('Error'));
           setIsLoading(false);
+          setLoadProgress(1);
           onLoadEnd?.();
           
           // Inject JavaScript to hide web header/footer after loading - but skip payment domains
@@ -661,6 +749,8 @@ export default function WebViewShell({
             canGoBack: nativeEvent.canGoBack,
             canGoForward: nativeEvent.canGoForward
           });
+          setIsLoading(false);
+          setActionError('Failed to load page');
           onError?.(nativeEvent);
         }}
         onHttpError={(syntheticEvent) => {
@@ -675,6 +765,7 @@ export default function WebViewShell({
         onLoadProgress={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
           const progressPercent = Math.round(nativeEvent.progress * 100);
+          setLoadProgress(nativeEvent.progress);
           console.log('WebView load progress:', `${progressPercent}%`, nativeEvent.url);
         }}
         startInLoadingState={true}
@@ -699,12 +790,36 @@ export default function WebViewShell({
         />
       )}
 
-      {/* Skeleton Loader */}
-      <SkeletonLoader
-        isLoading={isLoading}
-        showBottomMenu={routeData.showBottomMenu}
-        showHeader={routeData.showHeader}
-      />
+      {/* Skeleton Loader - Full mode for initial loads only */}
+      {showSkeleton && isInitialLoad && !isPaymentDomain(currentUrl) && (
+        <SkeletonLoader
+          isLoading={true}
+          mode="full"
+          showBottomMenu={routeData.showBottomMenu}
+          showHeader={routeData.showHeader}
+        />
+      )}
+
+      {/* Overlay Skeleton - For subsequent page loads */}
+      {showSkeleton && !isInitialLoad && !isPaymentDomain(currentUrl) && (
+        <SkeletonLoader
+          isLoading={true}
+          mode="overlay"
+        />
+      )}
+
+      {/* Action Overlay - For in-page actions like booking/checkout */}
+      {!isPaymentDomain(currentUrl) && (
+        <ActionOverlay
+          isVisible={hasActiveActions}
+          actionType={currentAction}
+          error={actionError}
+          onDismiss={() => {
+            setActionError(null);
+            setActionLoading({});
+          }}
+        />
+      )}
     </View>
   );
 }

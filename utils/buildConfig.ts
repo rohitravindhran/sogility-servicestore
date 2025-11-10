@@ -58,6 +58,8 @@ export function getAppDisplayName(businessId?: string): string {
       return 'Sogility';
     case 'hana':
       return 'Hana Care';
+    case 'nuvanta':
+      return 'Nuvanta';
     default:
       return 'Service Store';
   }

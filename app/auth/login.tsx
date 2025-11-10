@@ -1,45 +1,25 @@
 import { ConfigService } from '@/services/ConfigService';
+import { EnvironmentService, getUrls } from '@/services/EnvironmentService';
 import { StorageService } from '@/services/StorageService';
 import { Business } from '@/types/config';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import InlineSignupForm from '../../components/auth/InlineSignupForm';
 import { useAuth } from './AuthContainer';
 
-// URL Constants
-const appDomainName = '.getomnify.com';
-const appDomainHost = 'https://app.getomnify.com';
-const base_url_api = 'https://api.getomnify.com/';
-const base_url_app = 'https://app.getomnify.com/';
-
-const urls = {
-  appDomainName,
-  appDomainHost,
-  login: 'login',
-  getInfoForLogin: base_url_app + 'v2/apiv2/nonsession.json?method=getInfoForLogin',
-  sendOTPForLogin: base_url_app + 'v2/apiv2/nonsession.json?method=sendOTP',
-  searchCustomer: base_url_api + 'v1/customers/search',
-  checkOTP: 'login/checkOTP/',
-  sendOTP: base_url_app + 'v2/apiv2/nonsession.json?method=sendOTP',
-  verifyOTP: '/login/checkOTP/',
-  sendForgotPasswordLink: base_url_app + 'v2/Apiv2/nonsession.json?method=sendResetPasswordMailToUser',
-  business: base_url_api + 'v1/businesses/',
-  businessApp: base_url_app + 'v1/businesses/',
-  businessDetails: '/meta',
-  sendDeviceToken: '/device-tokens/',
-  fetchCustomFields: '/customfields.json?page_location=signup',
-  registerUser: base_url_app + 'v2/apiv2/nonsession.json?method=signupCustomer'
-};
+// Get environment-based URLs
+const environmentService = EnvironmentService.getInstance();
+const urls = getUrls();
 
 export default function LoginScreen() {
   const router = useRouter();

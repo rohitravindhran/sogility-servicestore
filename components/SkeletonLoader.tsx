@@ -8,12 +8,14 @@ import {
 
 interface SkeletonLoaderProps {
   isLoading: boolean;
+  mode?: 'full' | 'overlay';
   showBottomMenu?: boolean;
   showHeader?: boolean;
 }
 
 const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
   isLoading,
+  mode = 'full',
   showBottomMenu = false,
   showHeader = false
 }) => {
@@ -76,6 +78,24 @@ const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
     />
   );
 
+  if (mode === 'overlay') {
+    return (
+      <View style={styles.overlayContainer}>
+        <View style={styles.overlayBackground}>
+          <View style={styles.overlaySpinner}>
+            <Animated.View 
+              style={[
+                styles.spinnerCircle,
+                { opacity: pulseOpacity }
+              ]}
+            />
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // Full mode (original behavior)
   // Calculate container positioning based on navbar and bottom menu
   const containerStyle = {
     ...styles.container,
@@ -140,5 +160,29 @@ const styles = StyleSheet.create({
   skeletonItem: {
     backgroundColor: '#E5E7EB',
     borderRadius: 8,
+  },
+  overlayContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 8000,
+  },
+  overlayBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  overlaySpinner: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  spinnerCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E5E7EB',
   },
 });export default SkeletonLoader;

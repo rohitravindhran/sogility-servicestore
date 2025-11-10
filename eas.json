@@ -6,13 +6,70 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_APP_DOMAIN_NAME": ".omnifyapp.com",
+        "EXPO_PUBLIC_APP_DOMAIN_HOST": "https://dev-app.omnifyapp.com",
+        "EXPO_PUBLIC_BASE_URL_API": "https://dev-api.omnifyapp.com/",
+        "EXPO_PUBLIC_BASE_URL_APP": "https://dev-app.omnifyapp.com/"
+      }
+    },
+    "staging": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_APP_DOMAIN_NAME": ".omnifyapp.com",
+        "EXPO_PUBLIC_APP_DOMAIN_HOST": "https://staging-app.omnifyapp.com",
+        "EXPO_PUBLIC_BASE_URL_API": "https://staging-api.omnifyapp.com/",
+        "EXPO_PUBLIC_BASE_URL_APP": "https://staging-app.omnifyapp.com/"
+      }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_APP_DOMAIN_NAME": ".omnifyapp.com",
+        "EXPO_PUBLIC_APP_DOMAIN_HOST": "https://app.omnifyapp.com",
+        "EXPO_PUBLIC_BASE_URL_API": "https://api.omnifyapp.com/",
+        "EXPO_PUBLIC_BASE_URL_APP": "https://app.omnifyapp.com/"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_APP_DOMAIN_NAME": ".omnifyapp.com",
+        "EXPO_PUBLIC_APP_DOMAIN_HOST": "https://app.omnifyapp.com",
+        "EXPO_PUBLIC_BASE_URL_API": "https://api.omnifyapp.com/",
+        "EXPO_PUBLIC_BASE_URL_APP": "https://app.omnifyapp.com/"
+      }
+    },
+    "production-sogility": {
+      "extends": "production",
+      "env": {
+        "EXPO_PUBLIC_BUSINESS_ID": "sogility",
+        "EXPO_PUBLIC_APP_DOMAIN_NAME": ".omnifyapp.com",
+        "EXPO_PUBLIC_APP_DOMAIN_HOST": "https://app.omnifyapp.com",
+        "EXPO_PUBLIC_BASE_URL_API": "https://api.omnifyapp.com/",
+        "EXPO_PUBLIC_BASE_URL_APP": "https://app.omnifyapp.com/"
+      }
+    },
+    "production-hana": {
+      "extends": "production",
+      "env": {
+        "EXPO_PUBLIC_BUSINESS_ID": "hana",
+        "EXPO_PUBLIC_APP_DOMAIN_NAME": ".omnifyapp.com",
+        "EXPO_PUBLIC_APP_DOMAIN_HOST": "https://app.omnifyapp.com",
+        "EXPO_PUBLIC_BASE_URL_API": "https://api.omnifyapp.com/",
+        "EXPO_PUBLIC_BASE_URL_APP": "https://app.omnifyapp.com/"
+      }
+    },
+    "production-nuvanta": {
+      "extends": "production",
+      "env": {
+        "EXPO_PUBLIC_BUSINESS_ID": "nuvanta",
+        "EXPO_PUBLIC_APP_DOMAIN_NAME": ".omnifyapp.com",
+        "EXPO_PUBLIC_APP_DOMAIN_HOST": "https://app.omnifyapp.com",
+        "EXPO_PUBLIC_BASE_URL_API": "https://api.omnifyapp.com/",
+        "EXPO_PUBLIC_BASE_URL_APP": "https://app.omnifyapp.com/"
+      }
     }
   },
   "submit": {
