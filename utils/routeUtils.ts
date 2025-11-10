@@ -168,33 +168,64 @@ function hideWebElements() {
   
   // Hide web back buttons and browser navigation - enhanced selectors
   if (!isPaymentPage) {
+    // More aggressive back button hiding
     const backButtonSelectors = [
-      '[aria-label*="back"]', 
-      '[title*="back"]', 
+      '[aria-label*="back" i]', 
+      '[title*="back" i]', 
       '.back-button', 
       '.btn-back',
       '.back-btn',
       '.go-back',
       '.navigation-back',
-      '.booking-back-button',  // Specific booking back button
-      '.booking-header',       // Entire booking header
-      '[class*="back"]',
-      '[id*="back"]'
+      '.booking-back-button',
+      '.booking-header',
+      '[class*="back" i]',
+      '[id*="back" i]',
+      // Additional selectors for common back button patterns
+      'a[href*="back"]',
+      'button[onclick*="back"]',
+      '.nav-back',
+      '.header-back',
+      '.page-back'
     ].join(', ');
     
     const backButtons = document?.querySelectorAll(backButtonSelectors);
     backButtons?.forEach(btn => {
-      if (btn) btn.style.display = 'none';
+      if (btn) {
+        btn.style.display = 'none';
+        btn.style.visibility = 'hidden';
+        btn.style.opacity = '0';
+        btn.style.height = '0';
+        btn.style.width = '0';
+        btn.style.overflow = 'hidden';
+        btn.style.pointerEvents = 'none';
+      }
     });
     
-    // Hide elements containing back text (like "← Back") - more targeted
-    const backButtonElements = document?.querySelectorAll('a, button, .booking-back-button, .back-button');
-    backButtonElements?.forEach(el => {
+    // Hide elements containing back text - more comprehensive
+    const allElements = document?.querySelectorAll('a, button, div, span, .btn, [role="button"]');
+    allElements?.forEach(el => {
       if (el && el.textContent) {
         const text = el.textContent.trim().toLowerCase();
-        if (text === 'back' || text === '← back' || text.startsWith('← back')) {
+        // Check for various back button text patterns
+        if (text === 'back' || 
+            text === '← back' || 
+            text === '◀ back' ||
+            text === '‹ back' ||
+            text.startsWith('← back') || 
+            text.startsWith('◀ back') ||
+            text.startsWith('‹ back') ||
+            text === '←' ||
+            text === '◀' ||
+            text === '‹' ||
+            (text.length < 10 && text.includes('back'))) {
           el.style.display = 'none';
           el.style.visibility = 'hidden';
+          el.style.opacity = '0';
+          el.style.height = '0';
+          el.style.width = '0';
+          el.style.overflow = 'hidden';
+          el.style.pointerEvents = 'none';
         }
       }
     });
@@ -204,9 +235,9 @@ function hideWebElements() {
       '.booking-header',
       '.booking-back-button', 
       '.booking-header-title',
-      '[class*="booking"]',
-      'img[src*="Back-Arrow"]',
-      'img[src*="back"]'
+      'img[src*="Back-Arrow" i]',
+      'img[src*="back" i]',
+      'img[alt*="back" i]'
     ];
     
     bookingElements.forEach(selector => {
@@ -215,6 +246,11 @@ function hideWebElements() {
         if (el) {
           el.style.display = 'none';
           el.style.visibility = 'hidden';
+          el.style.opacity = '0';
+          el.style.height = '0';
+          el.style.width = '0';
+          el.style.overflow = 'hidden';
+          el.style.pointerEvents = 'none';
         }
       });
     });
@@ -266,7 +302,7 @@ function injectHideStyles() {
 
   const style = document.createElement('style');
   style.textContent = \`
-    /* Hide various back button patterns */
+    /* Comprehensive back button hiding */
     [aria-label*="back" i],
     [title*="back" i],
     .back-button,
@@ -277,8 +313,30 @@ function injectHideStyles() {
     .booking-back-button,
     .booking-header,
     [class*="back" i],
-    [id*="back" i] {
+    [id*="back" i],
+    a[href*="back" i],
+    button[onclick*="back" i],
+    .nav-back,
+    .header-back,
+    .page-back {
       display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      height: 0 !important;
+      width: 0 !important;
+      overflow: hidden !important;
+      pointer-events: none !important;
+    }
+    
+    /* Hide back button text patterns */
+    a:contains("Back"),
+    button:contains("Back"),
+    div:contains("← Back"),
+    span:contains("← Back"),
+    [role="button"]:contains("Back") {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
     }
     
     /* Hide specific booking elements */
@@ -345,36 +403,76 @@ function injectHideStyles() {
   document.head.appendChild(style);
 }
 
-// Targeted back button hiding function
+// Enhanced targeted back button hiding function
 function targetedBackButtonHiding() {
-  // Only hide specific booking navigation elements
+  console.log('Running targeted back button hiding...');
+  
+  // Comprehensive back button selectors
   const backSelectors = [
     '.booking-header', 
     '.booking-back-button', 
     'a.booking-back-button',
-    'div.booking-header'
+    'div.booking-header',
+    '[class*="back-button"]',
+    '[class*="back-btn"]',
+    '[class*="nav-back"]',
+    '[aria-label*="back" i]',
+    '[title*="back" i]'
   ];
   
   backSelectors.forEach(selector => {
     try {
       const elements = document.querySelectorAll(selector);
       elements.forEach(el => {
+        console.log('Hiding element by selector:', selector, el);
         el.style.display = 'none';
         el.style.visibility = 'hidden';
+        el.style.opacity = '0';
+        el.style.height = '0';
+        el.style.width = '0';
+        el.style.overflow = 'hidden';
+        el.style.pointerEvents = 'none';
       });
     } catch (e) {
-      // Ignore selector errors
+      console.log('Selector error:', selector, e);
     }
   });
   
-  // Only hide elements that are specifically back buttons (not containing other content)
-  const potentialBackButtons = document.querySelectorAll('a, button');
+  // More aggressive text-based hiding
+  const potentialBackButtons = document.querySelectorAll('a, button, div, span, [role="button"]');
   potentialBackButtons.forEach(el => {
     if (el && el.textContent) {
-      const text = el.textContent.trim();
-      // Only hide if the element ONLY contains back text (no other content)
-      if (text === 'Back' || text === '← Back' || (text.length < 10 && text.toLowerCase().includes('back'))) {
+      const text = el.textContent.trim().toLowerCase();
+      
+      // Check for back button patterns
+      const isBackButton = 
+        text === 'back' || 
+        text === '← back' || 
+        text === '◀ back' ||
+        text === '‹ back' ||
+        text === '←' ||
+        text === '◀' ||
+        text === '‹' ||
+        (text.startsWith('←') && text.length < 10) ||
+        (text.startsWith('◀') && text.length < 10) ||
+        (text.startsWith('‹') && text.length < 10) ||
+        (text.includes('back') && text.length < 15);
+      
+      if (isBackButton) {
+        console.log('Hiding back button by text:', text, el);
         el.style.display = 'none';
+        el.style.visibility = 'hidden';
+        el.style.opacity = '0';
+        el.style.height = '0';
+        el.style.width = '0';
+        el.style.overflow = 'hidden';
+        el.style.pointerEvents = 'none';
+        
+        // Also hide parent if it's a link/button container
+        if (el.parentElement && (el.parentElement.tagName === 'A' || el.parentElement.tagName === 'BUTTON')) {
+          el.parentElement.style.display = 'none';
+          el.parentElement.style.visibility = 'hidden';
+        }
       }
     }
   });
@@ -385,9 +483,18 @@ injectHideStyles();
 hideWebElements();
 
 // Run targeted hiding multiple times to catch delayed elements
+setTimeout(targetedBackButtonHiding, 50);
 setTimeout(targetedBackButtonHiding, 100);
+setTimeout(targetedBackButtonHiding, 200);
 setTimeout(targetedBackButtonHiding, 500);
 setTimeout(targetedBackButtonHiding, 1000);
+setTimeout(targetedBackButtonHiding, 2000);
+
+// Set up continuous monitoring for back buttons
+let backButtonInterval = setInterval(targetedBackButtonHiding, 1000);
+setTimeout(() => {
+  clearInterval(backButtonInterval);
+}, 10000); // Stop after 10 seconds
 
 // Handle modal detection
 function handleModalOpened() {

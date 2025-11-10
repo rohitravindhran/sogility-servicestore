@@ -1035,12 +1035,38 @@ export default function WebViewShell({
         }}
         onHttpError={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
-          console.error('WebView HTTP error:', {
+          console.warn('WebView HTTP error:', {
             url: nativeEvent.url,
             statusCode: nativeEvent.statusCode,
             description: nativeEvent.description
           });
-          onError?.(nativeEvent);
+          
+          // Handle different HTTP error codes appropriately
+          const { statusCode, url } = nativeEvent;
+          
+          // For booking/checkout pages, be more resilient to temporary errors
+          const isBookingPage = url.includes('checkout') || 
+                               url.includes('reviewbooking') || 
+                               url.includes('welcome/') ||
+                               url.includes('booking');
+          
+          if (isBookingPage && (statusCode >= 500 && statusCode < 600)) {
+            // 5xx errors are server errors - often temporary
+            console.log('Server error on booking page - showing retry option');
+            setActionLoading(prev => ({ ...prev, 'server_error': true }));
+            setActionError(`Server temporarily unavailable (${statusCode}). Please try again.`);
+          } else if (statusCode === 404) {
+            // Page not found - might need to navigate back
+            console.log('Page not found - showing error');
+            setActionError('Page not found. Please try again or go back.');
+          } else if (statusCode >= 400 && statusCode < 500) {
+            // 4xx errors are client errors - less likely to be resolved by retry
+            console.log('Client error - showing error message');
+            setActionError(`Unable to load page (${statusCode}). Please try again later.`);
+          } else {
+            // For non-booking pages or other errors, use original error handler
+            onError?.(nativeEvent);
+          }
         }}
         onLoadProgress={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
