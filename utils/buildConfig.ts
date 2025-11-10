@@ -14,18 +14,38 @@ export function getBuildBusinessId(): string | null {
     
     // Debug logging
     if (__DEV__) {
-      console.log('Build Config Debug:', {
-        expoConfig: Constants.expoConfig?.extra,
-        manifest: Constants.manifest?.extra,
-        processEnv: typeof process !== 'undefined' ? process.env.EXPO_PUBLIC_BUSINESS_ID : 'N/A',
-        businessId,
-        type: typeof businessId
+      console.log('🔧 Build Config Debug:', {
+        'Constants.expoConfig?.extra': Constants.expoConfig?.extra,
+        'Constants.manifest?.extra': Constants.manifest?.extra,
+        'process.env.EXPO_PUBLIC_BUSINESS_ID': typeof process !== 'undefined' ? process.env.EXPO_PUBLIC_BUSINESS_ID : 'N/A',
+        'businessId from Constants': businessId,
+        'type': typeof businessId,
+        'is empty object': businessId && typeof businessId === 'object' && Object.keys(businessId).length === 0
       });
+    }
+    
+    // Handle case where Constants has empty object {} instead of string
+    if (businessId && typeof businessId === 'object' && Object.keys(businessId).length === 0) {
+      console.log('⚠️ Constants businessId is empty object, falling back to process.env');
+      businessId = null;
     }
     
     // Also check if it's defined in process.env (for development)
     if (!businessId && typeof process !== 'undefined' && process.env) {
-      businessId = process.env.EXPO_PUBLIC_BUSINESS_ID;
+      const processBusinessId = process.env.EXPO_PUBLIC_BUSINESS_ID;
+      if (__DEV__) {
+        console.log('🔍 Using process.env EXPO_PUBLIC_BUSINESS_ID:', processBusinessId);
+      }
+      businessId = processBusinessId;
+    }
+    
+    // Final debug log
+    if (__DEV__) {
+      console.log('🎯 Final businessId result:', {
+        businessId,
+        isValid: businessId && typeof businessId === 'string' && businessId.trim() !== '',
+        trimmed: businessId && typeof businessId === 'string' ? businessId.trim() : null
+      });
     }
     
     // Ensure we return a proper string or null
@@ -35,7 +55,7 @@ export function getBuildBusinessId(): string | null {
     
     return null;
   } catch (error) {
-    console.warn('Error getting build business ID:', error);
+    console.warn('❌ Error getting build business ID:', error);
     return null;
   }
 }

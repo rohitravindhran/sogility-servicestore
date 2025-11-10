@@ -57,7 +57,6 @@
       "reactCompiler": true
     },
     "extra": {
-      "EXPO_PUBLIC_BUSINESS_ID": {},
       "router": {},
       "eas": {
         "projectId": "9626591b-39f0-49a4-a0e0-95caca65b418"

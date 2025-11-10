@@ -564,12 +564,8 @@ function setupActionDetection() {
       // Link-based actions
       'a[href*="checkout"]',
       'a[href*="book"]',
-      // Text-based detection
-      'button:contains("Book")',
-      'button:contains("Checkout")',
-      'button:contains("Proceed")',
-      'button:contains("Continue")',
-      'button:contains("Confirm")',
+      // Text-based detection will be handled separately
+      // Note: :contains() is not supported in querySelectorAll, handled below
       // Additional common patterns
       '.btn-book',
       '.btn-checkout',
@@ -628,7 +624,10 @@ function setupActionDetection() {
           }
         });
       } catch (e) {
-        console.log('Error hooking selector:', selector, e);
+        // Only log if it's not a selector syntax error (which is expected for :contains())
+        if (e instanceof Error && !e.message.includes('is not a valid selector')) {
+          console.log('Error hooking selector:', selector, e);
+        }
       }
     });
 
