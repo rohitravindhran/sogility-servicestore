@@ -27,7 +27,8 @@
         "foregroundImage": "./assets/images/sogility-logo.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.developersomnify.sogilityservicestore"
     },
     "web": {
       "output": "static",

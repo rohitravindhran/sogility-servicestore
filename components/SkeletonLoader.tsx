@@ -1,9 +1,9 @@
 import React from 'react';
 import {
-    Animated,
-    ScrollView,
-    StyleSheet,
-    View
+  Animated,
+  ScrollView,
+  StyleSheet,
+  View
 } from 'react-native';
 
 interface SkeletonLoaderProps {
@@ -91,25 +91,25 @@ const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
         showsVerticalScrollIndicator={false}
       >
         {/* Header title block - matches screenshot exactly */}
-        <SkeletonItem width="35%" height={40} marginBottom={16} borderRadius={8} />
+        <SkeletonItem width="35%" height={50} marginBottom={30} borderRadius={8} />
         
         {/* Subtitle block */}
 
         {/* Two medium horizontal blocks */}
-        <SkeletonItem width="50%" height={30} marginBottom={16} borderRadius={8} />
-        <SkeletonItem width="60%" height={30} marginBottom={40} borderRadius={8} />
+        <SkeletonItem width="43%" height={32} marginBottom={10} borderRadius={8} />
+        <SkeletonItem width="48%" height={32} marginBottom={30} borderRadius={8} />
         
 
         {/* Large main content area - matches screenshot height and position */}
-        <SkeletonItem width="100%" height={135} marginBottom={50} borderRadius={12} />
+        <SkeletonItem width="100%" height={152} marginBottom={58} borderRadius={12} />
 
         {/* Medium content block */}
-        <SkeletonItem width="50%" height={30} marginBottom={25} borderRadius={12} />
+        <SkeletonItem width="40%" height={30} marginBottom={20} borderRadius={5} />
 
         {/* Additional content blocks - matching screenshot layout */}
-        <SkeletonItem width="60%" height={70} marginBottom={20} borderRadius={12} />
-        <SkeletonItem width="60%" height={70} marginBottom={20} borderRadius={12} />
-        <SkeletonItem width="60%" height={70} marginBottom={20} borderRadius={12} />
+        <SkeletonItem width="50%" height={65} marginBottom={12} borderRadius={12} />
+        <SkeletonItem width="50%" height={65} marginBottom={12} borderRadius={12} />
+        <SkeletonItem width="50%" height={65} marginBottom={20} borderRadius={12} />
         <SkeletonItem width="100%" height={80} marginBottom={30} borderRadius={12} />
 
         {/* Final bottom block - matches screenshot */}
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 31,
+    paddingTop: 15,
     paddingBottom: 20,
   },
   skeletonItem: {
