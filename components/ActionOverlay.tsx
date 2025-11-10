@@ -1,33 +1,46 @@
 import React from 'react';
 import {
+    ActivityIndicator,
     Animated,
     Pressable,
     StyleSheet,
     Text,
+    TouchableOpacity,
     View
 } from 'react-native';
 
 interface ActionOverlayProps {
-  isVisible: boolean;
+  isVisible?: boolean;
+  visible?: boolean; // Support both prop names for compatibility
   actionType?: string;
   message?: string;
   error?: string | null;
   onDismiss?: () => void;
+  onRetry?: () => void;
+  onOpenInBrowser?: () => void;
+  onCancel?: () => void;
 }
 
 const ActionOverlay: React.FC<ActionOverlayProps> = ({
   isVisible,
+  visible,
   actionType = 'booking',
   message,
   error,
-  onDismiss
+  onDismiss,
+  onRetry,
+  onOpenInBrowser,
+  onCancel
 }) => {
+  // Support both isVisible and visible props for compatibility
+  const shouldShow = isVisible ?? visible ?? false;
+  
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   const scaleAnim = React.useRef(new Animated.Value(0.8)).current;
   const spinnerAnim = React.useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
-    if (isVisible) {
+    if (shouldShow) {
       // Fade in animation
       Animated.parallel([
         Animated.timing(fadeAnim, {
@@ -72,9 +85,9 @@ const ActionOverlay: React.FC<ActionOverlayProps> = ({
       spinnerAnim.stopAnimation();
       spinnerAnim.setValue(0);
     }
-  }, [isVisible, error, fadeAnim, scaleAnim, spinnerAnim]);
+  }, [shouldShow, error, fadeAnim, scaleAnim, spinnerAnim]);
 
-  if (!isVisible) {
+  if (!shouldShow) {
     return null;
   }
 
@@ -104,12 +117,15 @@ const ActionOverlay: React.FC<ActionOverlayProps> = ({
     }
   };
 
+  // Check if this is a timeout state (has retry/browser options)
+  const hasTimeoutActions = onRetry || onOpenInBrowser || onCancel;
+
   return (
-    <View style={styles.overlay}>
+    <View style={styles.overlay} pointerEvents="box-none">
       <Pressable 
         style={styles.overlayBackground}
-        onPress={error ? handleDismiss : undefined}
-        disabled={!error}
+        onPress={error && !hasTimeoutActions ? handleDismiss : undefined}
+        disabled={!(error && !hasTimeoutActions)}
       >
         <Animated.View 
           style={[
@@ -120,8 +136,8 @@ const ActionOverlay: React.FC<ActionOverlayProps> = ({
             }
           ]}
         >
-          {error ? (
-            // Error state
+          {error && !hasTimeoutActions ? (
+            // Error state (original behavior)
             <View style={styles.errorContainer}>
               <View style={styles.errorIcon}>
                 <Text style={styles.errorIconText}>!</Text>
@@ -132,8 +148,34 @@ const ActionOverlay: React.FC<ActionOverlayProps> = ({
                 <Text style={styles.retryButtonText}>Dismiss</Text>
               </Pressable>
             </View>
+          ) : hasTimeoutActions ? (
+            // Timeout state with action buttons
+            <View style={styles.timeoutContainer}>
+              <ActivityIndicator size="large" color="#6366F1" />
+              <Text style={styles.timeoutMessage}>{getActionMessage()}</Text>
+              
+              <View style={styles.actions}>
+                {onRetry && (
+                  <TouchableOpacity style={styles.button} onPress={onRetry}>
+                    <Text style={styles.buttonText}>Retry</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {onOpenInBrowser && (
+                  <TouchableOpacity style={styles.button} onPress={onOpenInBrowser}>
+                    <Text style={styles.buttonText}>Open in browser</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {onCancel && (
+                  <TouchableOpacity style={[styles.button, styles.light]} onPress={onCancel}>
+                    <Text style={[styles.buttonText, { color: '#333' }]}>Cancel</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
           ) : (
-            // Loading state
+            // Loading state (original behavior)
             <View style={styles.loadingContainer}>
               <Animated.View 
                 style={[
@@ -143,7 +185,7 @@ const ActionOverlay: React.FC<ActionOverlayProps> = ({
               >
                 <View style={styles.spinnerInner} />
               </Animated.View>
-              <Text style={styles.loadingText}>{getActionMessage()}</Text>
+              {/* <Text style={styles.loadingText}>{getActionMessage()}</Text> */}
             </View>
           )}
         </Animated.View>
@@ -159,20 +201,27 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 8500,
-  },
-  overlayBackground: {
-    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    zIndex: 10000, // Increased z-index
+    backgroundColor: 'rgba(0, 0, 0, 0.4)', // Darker background for better visibility
+  },
+  overlayBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 24,
     maxWidth: 280,
-    width: '80%',
+    width: '78%',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: {
@@ -207,6 +256,38 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
+  // Timeout state styles
+  timeoutContainer: {
+    alignItems: 'center',
+  },
+  timeoutMessage: {
+    marginTop: 8,
+    marginBottom: 12,
+    fontSize: 16,
+    textAlign: 'center',
+    color: '#374151',
+  },
+  actions: {
+    flexDirection: 'row',
+    marginTop: 4,
+    justifyContent: 'space-between',
+  },
+  button: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginHorizontal: 6,
+    borderRadius: 8,
+    backgroundColor: '#0a8843',
+  },
+  light: {
+    backgroundColor: '#eee',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  // Error state styles
   errorContainer: {
     alignItems: 'center',
   },

@@ -5,10 +5,10 @@
     "primaryColor": "#1E90FF",
     "secondaryColor": "#0D47A1",
     "logoUrl": "https://example.com/logos/sogility.png",
-    "storeUrl": "https://demosojility.omnifyapp.com/home",
+    "storeUrl": "https://demosojility.getomnify.com/home",
     "allowedHosts": [
-      "roartiger.omnifyapp.com", 
-      "app.omnifyapp.com", 
+      "roartiger.getomnify.com", 
+      "app.getomnify.com", 
       "app.getomnify.com", 
       "demosojility.getomnify.com",
       "js.stripe.com", 

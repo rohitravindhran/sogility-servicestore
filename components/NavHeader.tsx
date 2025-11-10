@@ -75,13 +75,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   backButton: {
-    padding: 8,
-    marginRight: 8,
+    padding: 12,
+    marginRight: 4,
+    marginLeft: -4, // Align with content edge
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 44, // Minimum touch target
+    minHeight: 44,
   },
   backIcon: {
-    fontSize: 24,
+    fontSize: 28,
     color: '#333333',
     fontWeight: '600',
+    lineHeight: 28,
   },
   logo: {
     width: 32,

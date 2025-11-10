@@ -52,6 +52,14 @@ export default function WebViewShell({
   const [actionError, setActionError] = useState<string | null>(null);
   const configService = ConfigService.getInstance();
   
+  // Targeted timeout and retry logic for idle-state fix
+  const actionTimeoutRef = useRef<number | null>(null);
+  const actionTargetRef = useRef<{ [k: string]: string }>({});
+  const actionRetryRef = useRef<{ [k: string]: number }>({});
+  const navPollRef = useRef<number | null>(null);
+  const ACTION_TIMEOUT_MS = 12000; // 12s
+  const ACTION_RETRY_LIMIT = 1;
+  
   // Refs for timer cleanup
   const skeletonTimeoutRef = useRef<number | null>(null);
 
@@ -115,7 +123,7 @@ export default function WebViewShell({
     };
   }, [currentUrl, routeData, business.storeUrl]);
 
-  // Debounced skeleton loading logic
+  // Optimized skeleton loading logic - show quickly to reduce idle time
   useEffect(() => {
     // Clear existing timeout
     if (skeletonTimeoutRef.current) {
@@ -124,18 +132,19 @@ export default function WebViewShell({
     }
 
     if (isLoading) {
-      // Don't show skeleton on payment domains
-      if (isPaymentDomain(currentUrl)) {
-        console.log('Skipping skeleton on payment domain:', currentUrl);
+      // For initial load, don't show skeleton on payment domains
+      if (isInitialLoad && isPaymentDomain(currentUrl)) {
+        console.log('Skipping skeleton on payment domain for initial load:', currentUrl);
         setShowSkeleton(false);
         return;
       }
 
-      // Set timeout to show skeleton after 300ms
+      // Show skeleton immediately for initial load, very short delay for subsequent loads
+      const delay = isInitialLoad ? 0 : 100; // 0ms for initial, 100ms for subsequent
       skeletonTimeoutRef.current = setTimeout(() => {
-        console.log('Showing skeleton after delay');
+        console.log('Showing skeleton after delay:', delay + 'ms');
         setShowSkeleton(true);
-      }, 300);
+      }, delay);
     } else {
       // Hide skeleton immediately when loading stops
       setShowSkeleton(false);
@@ -185,8 +194,8 @@ export default function WebViewShell({
     try {
       const urlObj = new URL(url);
       
-      // External payment domains (Stripe, hCaptcha, etc.)
-      const paymentDomains = [
+      // External payment domains (Stripe, hCaptcha, etc.) - these should skip injection
+      const externalPaymentDomains = [
         'js.stripe.com',
         'checkout.stripe.com', 
         'pay.stripe.com',
@@ -206,26 +215,27 @@ export default function WebViewShell({
         'api.hcaptcha.com'
       ];
       
-      // Check external payment domains
-      if (paymentDomains.some(domain => 
+      // Check external payment domains - these should skip injection
+      if (externalPaymentDomains.some(domain => 
         urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`)
       )) {
         return true;
       }
       
-      // Check payment-related paths on business domain
-      const paymentPaths = [
-        '/checkout/',
-        '/payment/',
+      // For business domains, only skip injection on final payment processing pages
+      // NOT on checkout pages where user is still making selections
+      const finalPaymentPaths = [
         '/welcome/reviewbooking/',
         '/welcome/success/',
         '/welcome/failure/',
-        '/billing/',
-        '/invoice/',
-        '/receipt/'
+        '/billing/invoice/',
+        '/receipt/',
+        '/payment/complete/',
+        '/payment/success/',
+        '/payment/failure/'
       ];
       
-      return paymentPaths.some(path => urlObj.pathname.includes(path));
+      return finalPaymentPaths.some(path => urlObj.pathname.includes(path));
     } catch {
       return false;
     }
@@ -245,6 +255,160 @@ export default function WebViewShell({
     } else {
       console.log('Running full JavaScript injection...');
       ${WEBVIEW_INJECTION_SCRIPT}
+      
+      // Targeted idle-state fix: Book/Proceed action monitoring
+      (function() {
+        const selectors = [
+          'button[data-action="book"]',
+          'button[data-action="checkout"]',
+          'button[id*="book"]',
+          'button[id*="checkout"]',
+          'a[href*="checkout"]',
+          'form[action*="checkout"] button[type="submit"]'
+        ];
+
+        function post(type, payload = {}) {
+          try {
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type, ...payload }));
+            }
+          } catch(e) {}
+        }
+
+        function getTarget(el) {
+          if (el.tagName === 'A' && el.href) return el.href;
+          if (el.form && el.form.action) return el.form.action;
+          return el.getAttribute('data-target') || null;
+        }
+
+        function hookButtons() {
+          selectors.forEach(sel => {
+            document.querySelectorAll(sel).forEach(el => {
+              if (el.__nativeBookingHook) return;
+              el.__nativeBookingHook = true;
+              el.addEventListener('click', function() {
+                const target = getTarget(this);
+                
+                // Only hook buttons that actually contain booking/checkout text
+                const text = this.textContent?.toLowerCase() || '';
+                const isBookingButton = /book|checkout|proceed|continue|confirm|purchase|buy/.test(text);
+                
+                if (isBookingButton || target) {
+                  post('ACTION_START', { 
+                    action: 'booking', 
+                    url: window.location.href, 
+                    target: target 
+                  });
+                  
+                  // Start short in-page monitor
+                  startActionMonitor();
+                }
+              }, { capture: true });
+            });
+          });
+          
+          // Also hook buttons by text content (for buttons without specific selectors)
+          document.querySelectorAll('button, a[role="button"], .btn').forEach(el => {
+            if (el.__nativeBookingHook) return;
+            const text = el.textContent?.toLowerCase().trim() || '';
+            if (/^(book|checkout|proceed|continue|confirm|purchase|buy)/.test(text) && text.length < 50) {
+              el.__nativeBookingHook = true;
+              el.addEventListener('click', function() {
+                const target = getTarget(this);
+                post('ACTION_START', { 
+                  action: 'booking', 
+                  url: window.location.href, 
+                  target: target 
+                });
+                
+                // Start short in-page monitor
+                startActionMonitor();
+              }, { capture: true });
+            }
+          });
+        }
+
+        function startActionMonitor() {
+          const startUrl = window.location.href;
+          let monitorActive = true;
+          let checkCount = 0;
+          const maxChecks = 40; // 20s at 500ms intervals
+          
+          const checkInterval = setInterval(() => {
+            if (!monitorActive || checkCount >= maxChecks) {
+              clearInterval(checkInterval);
+              return;
+            }
+            
+            checkCount++;
+            
+            // Check URL changes
+            if (window.location.href !== startUrl) {
+              post('ACTION_END', { 
+                reason: 'location_change', 
+                url: window.location.href 
+              });
+              monitorActive = false;
+              clearInterval(checkInterval);
+              return;
+            }
+            
+            // Check for payment/checkout iframes
+            if (document.querySelector('iframe[src*="stripe"], iframe[src*="payment"], iframe[src*="checkout"]')) {
+              post('ACTION_END', { 
+                reason: 'payment_iframe', 
+                url: window.location.href 
+              });
+              monitorActive = false;
+              clearInterval(checkInterval);
+              return;
+            }
+            
+            // Check for checkout/payment keywords in DOM (more conservative)
+            const bodyText = document.body.textContent || '';
+            const hasCheckoutContent = /checkout.*summary|payment.*details|order.*summary|booking.*confirmation|thank.*you.*booking/i.test(bodyText);
+            if (hasCheckoutContent && bodyText.length > 500) {
+              post('ACTION_END', { 
+                reason: 'checkout_text_appeared', 
+                url: window.location.href 
+              });
+              monitorActive = false;
+              clearInterval(checkInterval);
+              return;
+            }
+            
+            // Check if loading spinners disappeared and page has content
+            const spinners = document.querySelectorAll('.loading, .spinner, [class*="load"], [class*="spin"]');
+            const hasVisibleSpinners = Array.from(spinners).some(s => {
+              const style = window.getComputedStyle(s);
+              return style.display !== 'none' && style.visibility !== 'hidden';
+            });
+            
+            if (!hasVisibleSpinners && bodyText.length > 500) {
+              post('ACTION_END', { 
+                reason: 'no_loading_elements_and_has_content', 
+                url: window.location.href 
+              });
+              monitorActive = false;
+              clearInterval(checkInterval);
+              return;
+            }
+          }, 500);
+          
+          // Auto-stop after 20s
+          setTimeout(() => {
+            monitorActive = false;
+            clearInterval(checkInterval);
+          }, 20000);
+        }
+
+        // Initialize
+        hookButtons();
+        
+        // Re-hook on DOM changes
+        const hookInterval = setInterval(hookButtons, 800);
+        setTimeout(() => clearInterval(hookInterval), 15000);
+      })();
     }
     
     // Additional functionality for title and external links
@@ -405,7 +569,10 @@ export default function WebViewShell({
 
         case 'MODAL_OPENED':
           console.log('Modal opened - hiding bottom menu');
-          setRouteData(prev => ({ ...prev, showBottomMenu: false }));
+          // Only hide menu if we're not in a booking flow
+          if (!hasActiveActions) {
+            setRouteData(prev => ({ ...prev, showBottomMenu: false }));
+          }
           break;
 
         case 'MODAL_CLOSED':
@@ -442,31 +609,168 @@ export default function WebViewShell({
           handleLogout();
           break;
 
-        case 'ACTION_START':
-          console.log('Action started:', data.action);
-          setActionLoading(prev => ({ ...prev, [data.action]: true }));
-          setActionError(null);
+        case 'ACTION_START': {
+          const action = data.action || 'default';
+          const target = data.target || null;
+          console.log('ACTION_START', action, 'target:', target);
+
+          // Store target for potential retry
+          if (target) {
+            actionTargetRef.current[action] = target;
+          }
+
+          // Small delay before showing overlay to allow normal navigation to start
+          setTimeout(() => {
+            setActionLoading(prev => ({ ...prev, [action]: true }));
+            setActionError(null);
+          }, 300);
+
+          // Clear any existing timeout for this action
+          if (actionTimeoutRef.current) {
+            clearTimeout(actionTimeoutRef.current as any);
+            actionTimeoutRef.current = null;
+          }
+
+          // Start a timeout to detect long running action
+          actionTimeoutRef.current = setTimeout(() => {
+            console.warn(`Action '${action}' timed out after ${ACTION_TIMEOUT_MS}ms`);
+            
+            // Inject script to check page content length for debugging
+            if (webViewRef.current) {
+              webViewRef.current.injectJavaScript(`
+                (function(){
+                  try {
+                    const bodyText = document.body ? (document.body.textContent || '').length : 0;
+                    if (window.ReactNativeWebView) {
+                      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'PAGE_CONTENT_LENGTH', len: bodyText, url: window.location.href }));
+                    }
+                  } catch(e){}
+                })();
+                true;
+              `);
+            }
+
+            const target = actionTargetRef.current[action];
+            const retries = actionRetryRef.current[action] || 0;
+            
+            // Check if target is safe for automatic retry (not payment endpoints)
+            const isSafeForRetry = target && !(/payment|charge|complete|checkout/.test(target.toLowerCase()));
+            
+            if (retries < ACTION_RETRY_LIMIT && isSafeForRetry && target) {
+              console.log('Attempting targeted retry for action', action, 'target:', target);
+              actionRetryRef.current[action] = retries + 1;
+              
+              // Resolve relative URLs and inject targeted navigation
+              if (webViewRef.current) {
+                webViewRef.current.injectJavaScript(`
+                  (function(){
+                    try {
+                      const target = '${target}';
+                      const resolvedUrl = new URL(target, window.location.href).href;
+                      console.log('Targeted retry navigation to:', resolvedUrl);
+                      window.location.href = resolvedUrl;
+                    } catch(e) {
+                      console.error('Retry navigation failed:', e);
+                    }
+                  })();
+                  true;
+                `);
+              }
+
+              // Start NAV_POLL to monitor navigation
+              let pollCount = 0;
+              const maxPolls = 20; // ~10s at 500ms intervals
+              
+              navPollRef.current = setInterval(() => {
+                if (pollCount >= maxPolls || !webViewRef.current) {
+                  if (navPollRef.current) {
+                    clearInterval(navPollRef.current);
+                    navPollRef.current = null;
+                  }
+                  // Show fallback UI if polling didn't detect navigation
+                  setActionLoading(prev => ({ ...prev, [`${action}_timedout`]: true }));
+                  return;
+                }
+                
+                pollCount++;
+                webViewRef.current.injectJavaScript(`
+                  (function(){
+                    try {
+                      if (window.ReactNativeWebView) {
+                        window.ReactNativeWebView.postMessage(JSON.stringify({ 
+                          type: 'NAV_POLL', 
+                          url: window.location.href 
+                        }));
+                      }
+                    } catch(e){}
+                  })();
+                  true;
+                `);
+              }, 500) as any;
+            } else {
+              // Show fallback UI immediately (unsafe target or no retries left)
+              setActionLoading(prev => ({ ...prev, [`${action}_timedout`]: true }));
+            }
+          }, ACTION_TIMEOUT_MS) as any;
           break;
+        }
 
         case 'ACTION_END':
-          console.log('Action ended:', data.action, 'Reason:', data.reason);
-          setActionLoading(prev => {
-            const newState = { ...prev };
-            if (data.action) {
-              delete newState[data.action];
-            } else {
-              // Clear all if no specific action
-              return {};
-            }
-            return newState;
-          });
-          break;
-
-        case 'FETCH_DONE':
         case 'XHR_DONE':
-          console.log('Network request completed:', data.type);
-          // Clear all action loading states when network activity completes
+        case 'FETCH_DONE': {
+          console.log('Action/network finished', data.type, data.action);
+          
+          // Clear action loading and any timeouts
           setActionLoading({});
+          if (actionTimeoutRef.current) {
+            clearTimeout(actionTimeoutRef.current as any);
+            actionTimeoutRef.current = null;
+          }
+          if (navPollRef.current) {
+            clearInterval(navPollRef.current as any);
+            navPollRef.current = null;
+          }
+          break;
+        }
+
+        case 'NAV_POLL': {
+          const pollUrl = data.url;
+          console.log('NAV_POLL received:', pollUrl);
+          
+          // Only clear if there's a significant URL change (not just hash/query changes)
+          const currentUrlBase = currentUrl.split('#')[0].split('?')[0];
+          const pollUrlBase = pollUrl.split('#')[0].split('?')[0];
+          
+          if (pollUrlBase !== currentUrlBase || /\/checkout\/|\/payment\/|\/success\/|\/complete\//.test(pollUrl.toLowerCase())) {
+            console.log('Significant navigation detected via NAV_POLL, clearing overlays');
+            setActionLoading({});
+            if (actionTimeoutRef.current) {
+              clearTimeout(actionTimeoutRef.current as any);
+              actionTimeoutRef.current = null;
+            }
+            if (navPollRef.current) {
+              clearInterval(navPollRef.current as any);
+              navPollRef.current = null;
+            }
+          }
+          break;
+        }
+
+        case 'PAGE_CONTENT_LENGTH':
+          console.log('Page content length check:', data.len, 'URL:', data.url);
+          // If page has content, assume action completed
+          if (data.len > 100) {
+            console.log('Page has content, clearing action overlay');
+            setActionLoading({});
+            if (actionTimeoutRef.current) {
+              clearTimeout(actionTimeoutRef.current as any);
+              actionTimeoutRef.current = null;
+            }
+            if (navPollRef.current) {
+              clearInterval(navPollRef.current as any);
+              navPollRef.current = null;
+            }
+          }
           break;
           
         default:
@@ -506,6 +810,11 @@ export default function WebViewShell({
     targetUrl = addQueryParam(targetUrl, 'isWebView=true');
     
     console.log('Navigating to:', targetUrl);
+    
+    // Start loading state immediately to show skeleton
+    setIsLoading(true);
+    setLoadProgress(0);
+    
     setCurrentUrl(targetUrl);
     
     // Inject navigation script to handle client-side routing
@@ -516,6 +825,10 @@ export default function WebViewShell({
 
   // Handle back button press
   const handleBackPress = () => {
+    // Start loading state immediately to show skeleton
+    setIsLoading(true);
+    setLoadProgress(0);
+    
     if (currentUrl.includes('welcome/success')) {
       // Navigate back to home on success page
       setCurrentUrl(business.storeUrl);
@@ -524,151 +837,100 @@ export default function WebViewShell({
     }
   };
 
-  // Navigation state change handler
+  // Navigation state change handler - optimized for performance
   const handleNavigationStateChange = (navState: any) => {
     const { url, loading } = navState;
     
     setCanGoBack(navState.canGoBack);
     
+    // Show loading state immediately when navigation starts
+    if (loading && url !== currentUrl) {
+      setIsLoading(true);
+      setLoadProgress(0);
+    }
+    
     if (url && !loading) {
-      console.log('URL changed to:', url);
-      
-      // Check for specific login URL and redirect to native login screen
-      if (url === 'https://demosojility.getomnify.com/auth/login' || url.includes('demosojility.getomnify.com/auth/login')) {
-        console.log('Login URL detected in navigation state change, redirecting to native login screen:', url);
-        handleLogout();
-        return;
+      // Clear any action timeout on navigation (fast cleanup)
+      if (actionTimeoutRef.current) {
+        clearTimeout(actionTimeoutRef.current as any);
+        actionTimeoutRef.current = null;
+        setActionLoading({});
+        actionRetryRef.current = {};
+      }
+      if (navPollRef.current) {
+        clearInterval(navPollRef.current as any);
+        navPollRef.current = null;
       }
       
-      // Check for logout in URL changes
-      if (url.includes('welcome/logout')) {
-        console.log('Logout detected in URL change:', url);
+      // Quick logout detection (optimized checks)
+      if (url.includes('auth/login') || url.includes('welcome/logout')) {
         handleLogout();
         return;
       }
       
       setCurrentUrl(url);
       
-      // Update route data based on new URL
+      // Update route data based on new URL (async to not block navigation)
       const newRouteData = getRouteData(url);
       setRouteData(newRouteData);
       
-      // Inject JavaScript after navigation - but skip payment domains
-      setTimeout(() => {
-        if (webViewRef.current) {
-          if (isPaymentDomain(url)) {
-            console.log('Skipping JavaScript injection on payment domain:', url);
-          } else {
-            console.log('Injecting JavaScript for:', url);
-            webViewRef.current.injectJavaScript(WEBVIEW_INJECTION_SCRIPT);
-          }
-        }
-      }, 500);
+      // Inject JavaScript after navigation - optimized timing
+      if (!isPaymentDomain(url)) {
+        setTimeout(() => {
+          webViewRef.current?.injectJavaScript(WEBVIEW_INJECTION_SCRIPT);
+        }, 100); // Reduced from 500ms to 100ms
+      }
     }
     
     onNavigationStateChange?.(navState);
   };
 
-  // Allowlist check for navigation
+  // Optimized allowlist check for navigation
   const onShouldStartLoadWithRequest = (request: any) => {
     const { url } = request;
     
-    console.log('Navigation request to:', url);
-    
-    // Check for specific login URL and redirect to native login screen
-    if (url === 'https://demosojility.getomnify.com/auth/login' || url.includes('demosojility.getomnify.com/auth/login')) {
-      console.log('Login URL detected, redirecting to native login screen:', url);
-      handleLogout();
-      return false;
-    }
-    
-    // Handle logout redirects
-    if (url.includes('welcome/logout') || url.includes('auth/login?redirect')) {
-      console.log('Logout detected, handling authentication flow');
-      handleLogout();
-      return false;
-    }
-    
-    // Always allow the initial store URL
+    // Fast path: Always allow the initial store URL
     if (url === business.storeUrl) {
       return true;
     }
-
-    // Handle external links (social media, app stores, etc.)
-    if (
-      url.startsWith('tel:') ||
-      url.startsWith('mailto:') ||
-      url.startsWith('https://www.facebook.com') ||
-      url.startsWith('https://api.whatsapp.com') ||
-      url.startsWith('https://www.linkedin.com') ||
-      url.startsWith('https://twitter.com') ||
-      url.startsWith('instagram:') ||
-      url.startsWith('https://play.google') ||
-      url.startsWith('https://apps.apple')
-    ) {
-      console.log('Opening external URL in system browser:', url);
-      Linking.openURL(url).catch((err: any) => {
-        console.error('Failed to open external URL:', err);
-        Alert.alert('Error', 'Failed to open link');
-      });
+    
+    // Quick logout detection
+    if (url.includes('auth/login') || url.includes('welcome/logout')) {
+      handleLogout();
       return false;
     }
 
-    // Allow common payment and service domains that should stay in WebView
-    const paymentDomains = [
-      'js.stripe.com',
-      'checkout.stripe.com', 
-      'pay.stripe.com',
-      'connect.stripe.com',
-      'm.stripe.com',
-      'stripe.network',
-      'm.stripe.network',
-      'b.stripecdn.com',
-      'q.stripe.com',
-      'r.stripe.com',
-      'hooks.stripe.com',
-      'api.stripe.com',
-      // hCaptcha domains (used by Stripe for fraud prevention)
-      'hcaptcha.com',
-      'newassets.hcaptcha.com',
-      'accounts.hcaptcha.com',
-      'pst-issuer.hcaptcha.com',
-      'api.hcaptcha.com'
-    ];
-
-    try {
-      const urlObj = new URL(url);
-      
-      // Allow payment domains to stay in WebView for seamless checkout
-      if (paymentDomains.some(domain => urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`))) {
-        console.log('Allowing payment domain in WebView:', url);
-        return true;
-      }
-    } catch (error) {
-      console.error('Error parsing URL:', url, error);
+    // Fast external link detection using simple string checks
+    if (url.startsWith('tel:') || url.startsWith('mailto:') || 
+        url.startsWith('instagram:') || url.includes('facebook.com') ||
+        url.includes('whatsapp.com') || url.includes('linkedin.com') ||
+        url.includes('twitter.com') || url.includes('play.google') ||
+        url.includes('apps.apple')) {
+      Linking.openURL(url).catch(() => {});
+      return false;
     }
 
-    // Check if the URL is in the allowed hosts
+    // Quick payment domain check (optimized for performance)
+    if (url.includes('stripe.com') || url.includes('hcaptcha.com')) {
+      return true; // Allow payment domains
+    }
+
+    // Streamlined host allowlist check
     const isAllowed = configService.isHostAllowed(business, url);
     
     if (!isAllowed) {
-      console.log('Blocked navigation to unauthorized host:', url);
-      // Open in external browser instead
-      Linking.openURL(url).catch((err: any) => {
-        console.error('Failed to open blocked URL in external browser:', err);
-      });
+      Linking.openURL(url).catch(() => {});
       return false;
     }
 
-    // For main routes, ensure we add the WebView query parameter
-    const newRouteData = getRouteData(url);
-    if (newRouteData.isMainRoute && !url.includes('isWebView=true')) {
-      const updatedUrl = addQueryParam(url, 'isWebView=true');
-      console.log('Adding WebView parameter to main route:', updatedUrl);
-      
-      // Navigate to updated URL
-      setCurrentUrl(updatedUrl);
-      return false; // Prevent original navigation
+    // Quick WebView parameter check for main routes
+    if (!url.includes('isWebView=true')) {
+      const newRouteData = getRouteData(url);
+      if (newRouteData.isMainRoute) {
+        const updatedUrl = addQueryParam(url, 'isWebView=true');
+        setCurrentUrl(updatedUrl);
+        return false;
+      }
     }
 
     return true;
@@ -677,6 +939,10 @@ export default function WebViewShell({
   // Helper to check if any actions are loading
   const hasActiveActions = Object.keys(actionLoading).length > 0;
   const currentAction = Object.keys(actionLoading)[0] || 'booking';
+  
+  // compute derived flags for timeout handling
+  const anyActionTimedOut = Object.keys(actionLoading).some(k => k.endsWith('_timedout') && actionLoading[k]);
+  const anyActionRunning = Object.keys(actionLoading).some(k => !k.endsWith('_timedout') && actionLoading[k]);
 
   return (
     <View style={styles.container}>
@@ -724,11 +990,25 @@ export default function WebViewShell({
         onLoadEnd={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
           console.log('WebView load ended:', nativeEvent.url, 'Success:', !nativeEvent.title?.includes('Error'));
+          
           setIsLoading(false);
           setLoadProgress(1);
+          
+          // Clear timeouts on successful load
+          if (actionTimeoutRef.current) {
+            clearTimeout(actionTimeoutRef.current as any);
+            actionTimeoutRef.current = null;
+            setActionLoading({});
+            actionRetryRef.current = {};
+          }
+          if (navPollRef.current) {
+            clearInterval(navPollRef.current as any);
+            navPollRef.current = null;
+          }
+          
           onLoadEnd?.();
           
-          // Inject JavaScript to hide web header/footer after loading - but skip payment domains
+          // Inject JavaScript to hide web header/footer after loading - optimized timing
           setTimeout(() => {
             if (webViewRef.current) {
               if (isPaymentDomain(nativeEvent.url)) {
@@ -738,7 +1018,7 @@ export default function WebViewShell({
                 webViewRef.current.injectJavaScript(WEBVIEW_INJECTION_SCRIPT);
               }
             }
-          }, 1000);
+          }, 200); // Reduced from 1000ms to 200ms
         }}
         onError={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
@@ -764,9 +1044,8 @@ export default function WebViewShell({
         }}
         onLoadProgress={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
-          const progressPercent = Math.round(nativeEvent.progress * 100);
           setLoadProgress(nativeEvent.progress);
-          console.log('WebView load progress:', `${progressPercent}%`, nativeEvent.url);
+          // Reduced console logging for performance
         }}
         startInLoadingState={true}
         scalesPageToFit={true}
@@ -779,6 +1058,13 @@ export default function WebViewShell({
         mixedContentMode="compatibility"
         thirdPartyCookiesEnabled={true}
         sharedCookiesEnabled={true}
+        // Performance optimizations
+        javaScriptCanOpenWindowsAutomatically={true}
+        allowsFullscreenVideo={true}
+        bounces={false}
+        showsHorizontalScrollIndicator={false}
+        showsVerticalScrollIndicator={false}
+        allowsBackForwardNavigationGestures={true}
       />
 
       {/* BottomMenu - show based on route data */}
@@ -801,23 +1087,62 @@ export default function WebViewShell({
       )}
 
       {/* Overlay Skeleton - For subsequent page loads */}
-      {showSkeleton && !isInitialLoad && !isPaymentDomain(currentUrl) && (
+      {showSkeleton && !isInitialLoad && (
         <SkeletonLoader
           isLoading={true}
           mode="overlay"
         />
       )}
 
-      {/* Action Overlay - For in-page actions like booking/checkout */}
+      {/* Action Overlay - For in-page actions like booking/checkout with timeout handling */}
       {!isPaymentDomain(currentUrl) && (
         <ActionOverlay
-          isVisible={hasActiveActions}
+          visible={anyActionRunning || anyActionTimedOut}
+          message={anyActionTimedOut ? 'Still processing — this is taking longer than expected' : 'Processing your booking…'}
           actionType={currentAction}
           error={actionError}
           onDismiss={() => {
             setActionError(null);
             setActionLoading({});
           }}
+          onRetry={anyActionTimedOut ? () => {
+            // Retry action: reload webview or inject navigation to checkout
+            if (webViewRef.current) {
+              console.log('User triggered Retry for booking');
+              webViewRef.current.reload();
+            }
+            // hide the timedout UI
+            setActionLoading({});
+          } : undefined}
+          onOpenInBrowser={anyActionTimedOut ? () => {
+            // Use captured target or current url
+            const action = Object.keys(actionLoading).find(k => k.endsWith('_timedout'))?.replace('_timedout', '') || 'default';
+            const target = actionTargetRef.current[action];
+            const urlToOpen = target ? (target.startsWith('http') ? target : new URL(target, business.storeUrl).href) : currentUrl;
+            
+            console.log('User triggered Open in Browser for:', urlToOpen);
+            
+            Linking.openURL(urlToOpen).catch(err => {
+              console.error('Failed to open in browser:', err);
+              Alert.alert('Error', 'Failed to open link in external browser');
+            });
+
+            // hide overlay
+            setActionLoading({});
+          } : undefined}
+          onCancel={anyActionTimedOut ? () => {
+            console.log('User cancelled timeout action');
+            
+            setActionLoading({});
+            if (actionTimeoutRef.current) {
+              clearTimeout(actionTimeoutRef.current as any);
+              actionTimeoutRef.current = null;
+            }
+            if (navPollRef.current) {
+              clearInterval(navPollRef.current as any);
+              navPollRef.current = null;
+            }
+          } : undefined}
         />
       )}
     </View>
@@ -827,5 +1152,6 @@ export default function WebViewShell({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    position: 'relative', // Ensure proper positioning context for overlays
   },
 });
