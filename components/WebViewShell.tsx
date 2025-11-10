@@ -132,9 +132,9 @@ export default function WebViewShell({
     }
 
     if (isLoading) {
-      // For initial load, don't show skeleton on payment domains
-      if (isInitialLoad && isPaymentDomain(currentUrl)) {
-        console.log('Skipping skeleton on payment domain for initial load:', currentUrl);
+      // Don't show skeleton on payment domains or addons pages to prevent UI interference
+      if (isPaymentDomain(currentUrl) || isAddonsPage(currentUrl)) {
+        console.log('Skipping skeleton on special page:', currentUrl);
         setShowSkeleton(false);
         return;
       }
@@ -241,24 +241,51 @@ export default function WebViewShell({
     }
   };
 
+  // Check if current URL is an addons/selection page that should have limited monitoring
+  const isAddonsPage = (url: string): boolean => {
+    try {
+      const urlObj = new URL(url);
+      const addonsPatterns = [
+        '/welcome/addons',
+        '/addons',
+        '/membership/select',
+        '/packages/select',
+        '/extras',
+        '/upgrades'
+      ];
+      
+      return addonsPatterns.some(pattern => urlObj.pathname.includes(pattern));
+    } catch {
+      return false;
+    }
+  };
+
   // Combined injected JavaScript - skip injection on payment domains
   const injectedJavaScript = `
-    // Check if this is a payment domain
+    // Check if this is a payment domain or addons page
     const isPaymentPage = ${isPaymentDomain(currentUrl)};
+    const isAddonsPage = ${isAddonsPage(currentUrl)};
     
     console.log('Page URL:', window.location.href);
     console.log('Is payment domain:', isPaymentPage);
+    console.log('Is addons page:', isAddonsPage);
     
     if (isPaymentPage) {
       console.log('Skipping JavaScript injection on payment domain');
       // Only minimal console logging for payment pages
     } else {
-      console.log('Running full JavaScript injection...');
+      console.log('Running JavaScript injection...');
       ${WEBVIEW_INJECTION_SCRIPT}
       
-      // Targeted idle-state fix: Book/Proceed action monitoring
+      // Targeted idle-state fix: Book/Proceed action monitoring (reduced for addons pages)
       (function() {
-        const selectors = [
+        // For addons pages, use more selective monitoring
+        const selectors = isAddonsPage ? [
+          'button[data-action="checkout"]',
+          'a[href*="checkout"]',
+          'form[action*="checkout"] button[type="submit"]',
+          'button[type="submit"][value*="book"]'
+        ] : [
           'button[data-action="book"]',
           'button[data-action="checkout"]',
           'button[id*="book"]',
@@ -289,50 +316,62 @@ export default function WebViewShell({
               el.addEventListener('click', function() {
                 const target = getTarget(this);
                 
-                // Only hook buttons that actually contain booking/checkout text
+                // For addons pages, be more selective about which buttons trigger monitoring
                 const text = this.textContent?.toLowerCase() || '';
-                const isBookingButton = /book|checkout|proceed|continue|confirm|purchase|buy/.test(text);
+                let shouldMonitor = false;
                 
-                if (isBookingButton || target) {
+                if (isAddonsPage) {
+                  // On addons pages, only monitor final booking/checkout actions, not addon selection
+                  shouldMonitor = /^(book|checkout|proceed to booking|continue to checkout|confirm booking)/.test(text) && text.length < 100;
+                } else {
+                  // Regular pages use broader monitoring
+                  shouldMonitor = /book|checkout|proceed|continue|confirm|purchase|buy/.test(text) && text.length < 50;
+                }
+                
+                if ((shouldMonitor || target) && !text.includes('addon') && !text.includes('add ')) {
+                  console.log('Starting action monitor for:', text, 'target:', target);
                   post('ACTION_START', { 
                     action: 'booking', 
                     url: window.location.href, 
                     target: target 
                   });
                   
-                  // Start short in-page monitor
+                  // Start action monitor
                   startActionMonitor();
                 }
               }, { capture: true });
             });
           });
           
-          // Also hook buttons by text content (for buttons without specific selectors)
-          document.querySelectorAll('button, a[role="button"], .btn').forEach(el => {
-            if (el.__nativeBookingHook) return;
-            const text = el.textContent?.toLowerCase().trim() || '';
-            if (/^(book|checkout|proceed|continue|confirm|purchase|buy)/.test(text) && text.length < 50) {
-              el.__nativeBookingHook = true;
-              el.addEventListener('click', function() {
-                const target = getTarget(this);
-                post('ACTION_START', { 
-                  action: 'booking', 
-                  url: window.location.href, 
-                  target: target 
-                });
-                
-                // Start short in-page monitor
-                startActionMonitor();
-              }, { capture: true });
-            }
-          });
+          // For non-addons pages, also hook buttons by text content
+          if (!isAddonsPage) {
+            document.querySelectorAll('button, a[role="button"], .btn').forEach(el => {
+              if (el.__nativeBookingHook) return;
+              const text = el.textContent?.toLowerCase().trim() || '';
+              if (/^(book|checkout|proceed|continue|confirm|purchase|buy)/.test(text) && text.length < 50) {
+                el.__nativeBookingHook = true;
+                el.addEventListener('click', function() {
+                  const target = getTarget(this);
+                  console.log('Starting action monitor for text-based button:', text);
+                  post('ACTION_START', { 
+                    action: 'booking', 
+                    url: window.location.href, 
+                    target: target 
+                  });
+                  
+                  startActionMonitor();
+                }, { capture: true });
+              }
+            });
+          }
         }
 
         function startActionMonitor() {
           const startUrl = window.location.href;
           let monitorActive = true;
           let checkCount = 0;
-          const maxChecks = 40; // 20s at 500ms intervals
+          // Shorter timeout for addons pages
+          const maxChecks = isAddonsPage ? 20 : 40; // 10s vs 20s at 500ms intervals
           
           const checkInterval = setInterval(() => {
             if (!monitorActive || checkCount >= maxChecks) {
@@ -364,17 +403,31 @@ export default function WebViewShell({
               return;
             }
             
-            // Check for checkout/payment keywords in DOM (more conservative)
+            // More lenient checking for addons pages
             const bodyText = document.body.textContent || '';
-            const hasCheckoutContent = /checkout.*summary|payment.*details|order.*summary|booking.*confirmation|thank.*you.*booking/i.test(bodyText);
-            if (hasCheckoutContent && bodyText.length > 500) {
-              post('ACTION_END', { 
-                reason: 'checkout_text_appeared', 
-                url: window.location.href 
-              });
-              monitorActive = false;
-              clearInterval(checkInterval);
-              return;
+            if (isAddonsPage) {
+              // For addons pages, just check if page has loaded content
+              if (bodyText.length > 300) {
+                post('ACTION_END', { 
+                  reason: 'addons_page_loaded', 
+                  url: window.location.href 
+                });
+                monitorActive = false;
+                clearInterval(checkInterval);
+                return;
+              }
+            } else {
+              // Regular checkout/payment content detection
+              const hasCheckoutContent = /checkout.*summary|payment.*details|order.*summary|booking.*confirmation|thank.*you.*booking/i.test(bodyText);
+              if (hasCheckoutContent && bodyText.length > 500) {
+                post('ACTION_END', { 
+                  reason: 'checkout_text_appeared', 
+                  url: window.location.href 
+                });
+                monitorActive = false;
+                clearInterval(checkInterval);
+                return;
+              }
             }
             
             // Check if loading spinners disappeared and page has content
@@ -384,7 +437,8 @@ export default function WebViewShell({
               return style.display !== 'none' && style.visibility !== 'hidden';
             });
             
-            if (!hasVisibleSpinners && bodyText.length > 500) {
+            const minContentLength = isAddonsPage ? 300 : 500;
+            if (!hasVisibleSpinners && bodyText.length > minContentLength) {
               post('ACTION_END', { 
                 reason: 'no_loading_elements_and_has_content', 
                 url: window.location.href 
@@ -395,19 +449,20 @@ export default function WebViewShell({
             }
           }, 500);
           
-          // Auto-stop after 20s
+          // Auto-stop after timeout (shorter for addons pages)
+          const timeout = isAddonsPage ? 10000 : 20000;
           setTimeout(() => {
             monitorActive = false;
             clearInterval(checkInterval);
-          }, 20000);
+          }, timeout);
         }
 
-        // Initialize
+        // Initialize with less frequent re-hooking for addons pages
         hookButtons();
         
-        // Re-hook on DOM changes
-        const hookInterval = setInterval(hookButtons, 800);
-        setTimeout(() => clearInterval(hookInterval), 15000);
+        // Re-hook on DOM changes (less aggressive for addons pages)
+        const hookInterval = setInterval(hookButtons, isAddonsPage ? 1500 : 800);
+        setTimeout(() => clearInterval(hookInterval), isAddonsPage ? 8000 : 15000);
       })();
     }
     
@@ -593,8 +648,11 @@ export default function WebViewShell({
 
         case 'PAGE_LOADING_ISSUE':
           console.error('Page loading issue detected:', data);
-          // You might want to show an error message or reload the page
-          if (data.bodyLength < 50) {
+          // For addons pages, be more lenient - they might have dynamic content loading
+          if (isAddonsPage(data.url)) {
+            console.log('Addons page loading issue - monitoring for content...');
+            // Don't auto-reload addons pages, just log for debugging
+          } else if (data.bodyLength < 50) {
             console.log('Attempting to reload due to loading issue...');
             setTimeout(() => {
               if (webViewRef.current) {
@@ -1102,8 +1160,8 @@ export default function WebViewShell({
         />
       )}
 
-      {/* Skeleton Loader - Full mode for initial loads only */}
-      {showSkeleton && isInitialLoad && !isPaymentDomain(currentUrl) && (
+      {/* Skeleton Loader - Full mode for initial loads only (skip on special pages) */}
+      {showSkeleton && isInitialLoad && !isPaymentDomain(currentUrl) && !isAddonsPage(currentUrl) && (
         <SkeletonLoader
           isLoading={true}
           mode="full"
@@ -1112,8 +1170,8 @@ export default function WebViewShell({
         />
       )}
 
-      {/* Overlay Skeleton - For subsequent page loads */}
-      {showSkeleton && !isInitialLoad && (
+      {/* Overlay Skeleton - For subsequent page loads (skip on special pages) */}
+      {showSkeleton && !isInitialLoad && !isAddonsPage(currentUrl) && (
         <SkeletonLoader
           isLoading={true}
           mode="overlay"
@@ -1121,7 +1179,7 @@ export default function WebViewShell({
       )}
 
       {/* Action Overlay - For in-page actions like booking/checkout with timeout handling */}
-      {!isPaymentDomain(currentUrl) && (
+      {!isPaymentDomain(currentUrl) && !isAddonsPage(currentUrl) && (
         <ActionOverlay
           visible={anyActionRunning || anyActionTimedOut}
           message={anyActionTimedOut ? 'Still processing — this is taking longer than expected' : 'Processing your booking…'}
@@ -1169,6 +1227,20 @@ export default function WebViewShell({
               navPollRef.current = null;
             }
           } : undefined}
+        />
+      )}
+
+      {/* Simplified Action Overlay for Addons Pages - only show if explicitly needed */}
+      {isAddonsPage(currentUrl) && anyActionRunning && (
+        <ActionOverlay
+          visible={true}
+          message="Processing selection…"
+          actionType={currentAction}
+          error={actionError}
+          onDismiss={() => {
+            setActionError(null);
+            setActionLoading({});
+          }}
         />
       )}
     </View>

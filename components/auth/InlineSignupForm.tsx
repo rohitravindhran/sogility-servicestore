@@ -1,4 +1,5 @@
 import AccountSuccessAnimation from '@/components/AccountSuccessAnimation';
+import { EnvironmentService } from '@/services/EnvironmentService';
 import { Business } from '@/types/config';
 import {
   checkIsEmpty,
@@ -21,11 +22,13 @@ import {
   View
 } from 'react-native';
 
-// URL Constants (matching the existing implementation)
-const appDomainName = '.getomnify.com';
-const appDomainHost = 'https://app.getomnify.com';
-const base_url_api = 'https://api.getomnify.com/';
-const base_url_app = 'https://app.getomnify.com/';
+// Get environment-based URLs
+const environmentService = EnvironmentService.getInstance();
+const environmentConfig = environmentService.getConfig();
+const appDomainName = environmentConfig.appDomainName;
+const appDomainHost = environmentConfig.appDomainHost;
+const base_url_api = environmentConfig.baseUrlApi;
+const base_url_app = environmentConfig.baseUrlApp;
 
 const urls = {
   appDomainName,

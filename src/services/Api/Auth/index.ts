@@ -1,5 +1,6 @@
-import {urls} from '../../../constants/Url';
-import Api, {setToken} from '../index';
+import { getUrls } from '../../../../services/EnvironmentService';
+import { urls } from '../../../constants/Url';
+import Api from '../index';
 
 export function preLoginCheckApi(email: string, businessId: string) {
   console.log(
@@ -27,11 +28,14 @@ export function verifyOTPApi(data: Object) {
 }
 
 export function fetchCustomFieldsApi(businessId: String) {
-  console.log('urls.fetchCustomFields',`${urls.businessApp + businessId +urls.fetchCustomFields}`);
-  return Api.getAuthInstance(`${urls.businessApp + businessId + urls.fetchCustomFields}`);
+  const envUrls = getUrls();
+  const fetchUrl = `${envUrls.businessApp + businessId + envUrls.fetchCustomFields}`;
+  console.log('urls.fetchCustomFields (env-based):', fetchUrl);
+  return Api.getAuthInstance(fetchUrl);
 }
 
 export function registerUserApi(data: Object) {
-  console.log('urls.fetchCustomFields',urls.registerUser);
-  return Api.postAuthInstance(urls.registerUser,data);
+  const envUrls = getUrls();
+  console.log('urls.registerUser (env-based):', envUrls.registerUser);
+  return Api.postAuthInstance(envUrls.registerUser, data);
 }
