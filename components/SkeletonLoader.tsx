@@ -1,9 +1,9 @@
 import React from 'react';
 import {
-  Animated,
-  ScrollView,
-  StyleSheet,
-  View
+    Animated,
+    ScrollView,
+    StyleSheet,
+    View
 } from 'react-native';
 
 interface SkeletonLoaderProps {
