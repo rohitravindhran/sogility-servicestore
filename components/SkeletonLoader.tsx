@@ -20,10 +20,11 @@ const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
   showHeader = false
 }) => {
   const shimmerAnim = React.useRef(new Animated.Value(0)).current;
+  const progressAnim = React.useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
     if (isLoading) {
-      // Start subtle pulse animation
+      // Start subtle pulse animation for skeleton items
       Animated.loop(
         Animated.sequence([
           Animated.timing(shimmerAnim, {
@@ -38,11 +39,22 @@ const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
           }),
         ])
       ).start();
+
+      // Start smooth progress bar animation
+      Animated.loop(
+        Animated.timing(progressAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: false,
+        })
+      ).start();
     } else {
       shimmerAnim.stopAnimation();
+      progressAnim.stopAnimation();
       shimmerAnim.setValue(0);
+      progressAnim.setValue(0);
     }
-  }, [isLoading, shimmerAnim]);
+  }, [isLoading, shimmerAnim, progressAnim]);
 
   if (!isLoading) {
     return null;
@@ -52,6 +64,35 @@ const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
     inputRange: [0, 1],
     outputRange: [0.4, 0.8],
   });
+
+  const progressWidth = progressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+    extrapolate: 'clamp',
+  });
+
+  const progressColor = progressAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ['#6366F1', '#8B5CF6', '#10B981'],
+    extrapolate: 'clamp',
+  });
+
+  // Top loading bar component
+  const TopLoadingBar = () => (
+    <View style={[styles.topLoadingContainer, showHeader && styles.topLoadingWithHeader]}>
+      <View style={styles.topLoadingTrack}>
+        <Animated.View 
+          style={[
+            styles.topLoadingFill,
+            { 
+              width: progressWidth,
+              backgroundColor: progressColor
+            }
+          ]}
+        />
+      </View>
+    </View>
+  );
 
   const SkeletonItem: React.FC<{ 
     width: string | number; 
@@ -80,18 +121,22 @@ const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
 
   if (mode === 'overlay') {
     return (
-      <View style={styles.overlayContainer}>
-        <View style={styles.overlayBackground}>
-          <View style={styles.overlaySpinner}>
-            <Animated.View 
-              style={[
-                styles.spinnerCircle,
-                { opacity: pulseOpacity }
-              ]}
-            />
+      <>
+        {/* Top loading bar for overlay mode */}
+        <TopLoadingBar />
+        <View style={styles.overlayContainer}>
+          <View style={styles.overlayBackground}>
+            <View style={styles.overlaySpinner}>
+              <Animated.View 
+                style={[
+                  styles.spinnerCircle,
+                  { opacity: pulseOpacity }
+                ]}
+              />
+            </View>
           </View>
         </View>
-      </View>
+      </>
     );
   }
 
@@ -104,12 +149,15 @@ const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
   };
 
   return (
-    <View style={containerStyle}>
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
+    <>
+      {/* Top loading bar for full mode */}
+      <TopLoadingBar />
+      <View style={containerStyle}>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
         {/* Header title block - matches screenshot exactly */}
         <SkeletonItem width="35%" height={50} marginBottom={30} borderRadius={8} />
         
@@ -136,6 +184,7 @@ const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({
         <SkeletonItem width="100%" height={100} marginBottom={20} borderRadius={12} />
       </ScrollView>
     </View>
+    </>
   );
 };
 
@@ -184,5 +233,36 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     backgroundColor: '#E5E7EB',
+  },
+  // Top loading bar styles (replaces ProgressBar)
+  topLoadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    zIndex: 10000,
+  },
+  topLoadingWithHeader: {
+    top: 60, // Below NavHeader
+  },
+  topLoadingTrack: {
+    height: 4,
+    backgroundColor: 'rgba(99, 102, 241, 0.15)',
+    overflow: 'hidden',
+    borderRadius: 2,
+  },
+  topLoadingFill: {
+    height: '100%',
+    backgroundColor: '#6366F1',
+    borderRadius: 2,
+    shadowColor: '#6366F1',
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.6,
+    shadowRadius: 3,
+    elevation: 3,
   },
 });export default SkeletonLoader;

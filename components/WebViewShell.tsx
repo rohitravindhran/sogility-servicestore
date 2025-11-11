@@ -20,7 +20,6 @@ import {
 import ActionOverlay from './ActionOverlay';
 import BottomMenu from './BottomMenu';
 import NavHeader from './NavHeader';
-import ProgressBar from './ProgressBar';
 import SkeletonLoader from './SkeletonLoader';
 
 interface WebViewShellProps {
@@ -47,7 +46,6 @@ export default function WebViewShell({
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(false);
-  const [loadProgress, setLoadProgress] = useState(0);
   const [actionLoading, setActionLoading] = useState<{[key: string]: boolean}>({});
   const [actionError, setActionError] = useState<string | null>(null);
   const configService = ConfigService.getInstance();
@@ -123,7 +121,7 @@ export default function WebViewShell({
     };
   }, [currentUrl, routeData, business.storeUrl]);
 
-  // Optimized skeleton loading logic - show quickly to reduce idle time
+  // Enhanced skeleton loading logic - replaces progress bar entirely
   useEffect(() => {
     // Clear existing timeout
     if (skeletonTimeoutRef.current) {
@@ -139,15 +137,14 @@ export default function WebViewShell({
         return;
       }
 
-      // Show skeleton immediately for initial load, very short delay for subsequent loads
-      const delay = isInitialLoad ? 0 : 100; // 0ms for initial, 100ms for subsequent
-      skeletonTimeoutRef.current = setTimeout(() => {
-        console.log('Showing skeleton after delay:', delay + 'ms');
-        setShowSkeleton(true);
-      }, delay);
+      // Show skeleton immediately as the primary loading indicator
+      console.log('Showing skeleton as primary loading indicator for:', currentUrl);
+      setShowSkeleton(true);
     } else {
-      // Hide skeleton immediately when loading stops
+      // Hide skeleton immediately when loading completes
+      console.log('Hiding skeleton - loading completed');
       setShowSkeleton(false);
+      
       // After first successful load, no longer initial load
       if (isInitialLoad) {
         setIsInitialLoad(false);
@@ -869,9 +866,8 @@ export default function WebViewShell({
     
     console.log('Navigating to:', targetUrl);
     
-    // Start loading state immediately to show skeleton
+    // Start loading state immediately
     setIsLoading(true);
-    setLoadProgress(0);
     
     setCurrentUrl(targetUrl);
     
@@ -883,9 +879,8 @@ export default function WebViewShell({
 
   // Handle back button press
   const handleBackPress = () => {
-    // Start loading state immediately to show skeleton
+    // Start loading state immediately
     setIsLoading(true);
-    setLoadProgress(0);
     
     if (currentUrl.includes('welcome/success')) {
       // Navigate back to home on success page
@@ -895,16 +890,15 @@ export default function WebViewShell({
     }
   };
 
-  // Navigation state change handler - optimized for performance
+  // Navigation state change handler - enhanced with better progress feedback
   const handleNavigationStateChange = (navState: any) => {
     const { url, loading } = navState;
     
     setCanGoBack(navState.canGoBack);
     
-    // Show loading state immediately when navigation starts
+    // Show loading state when navigation starts
     if (loading && url !== currentUrl) {
       setIsLoading(true);
-      setLoadProgress(0);
     }
     
     if (url && !loading) {
@@ -1004,13 +998,6 @@ export default function WebViewShell({
 
   return (
     <View style={styles.container}>
-      {/* Progress Bar - shows during page loads */}
-      <ProgressBar
-        progress={loadProgress}
-        isVisible={isLoading}
-        showHeader={routeData.showHeader}
-      />
-
       {/* NavHeader - show based on route data */}
       {routeData.showHeader && (
         <NavHeader
@@ -1042,15 +1029,15 @@ export default function WebViewShell({
           const { nativeEvent } = syntheticEvent;
           console.log('WebView load started:', nativeEvent.url);
           setIsLoading(true);
-          setLoadProgress(0);
+          
           onLoadStart?.();
         }}
         onLoadEnd={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
           console.log('WebView load ended:', nativeEvent.url, 'Success:', !nativeEvent.title?.includes('Error'));
           
+          // Hide loading state immediately
           setIsLoading(false);
-          setLoadProgress(1);
           
           // Clear timeouts on successful load
           if (actionTimeoutRef.current) {
@@ -1128,8 +1115,10 @@ export default function WebViewShell({
         }}
         onLoadProgress={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
-          setLoadProgress(nativeEvent.progress);
-          // Reduced console logging for performance
+          // Log significant progress milestones only for debugging
+          if (nativeEvent.progress > 0 && nativeEvent.progress % 0.25 < 0.05) {
+            console.log('Loading progress:', Math.round(nativeEvent.progress * 100) + '%');
+          }
         }}
         startInLoadingState={true}
         scalesPageToFit={true}
@@ -1160,21 +1149,13 @@ export default function WebViewShell({
         />
       )}
 
-      {/* Skeleton Loader - Full mode for initial loads only (skip on special pages) */}
-      {showSkeleton && isInitialLoad && !isPaymentDomain(currentUrl) && !isAddonsPage(currentUrl) && (
+      {/* Skeleton Loader - Primary loading indicator (replaces progress bar) */}
+      {showSkeleton && !isPaymentDomain(currentUrl) && !isAddonsPage(currentUrl) && (
         <SkeletonLoader
           isLoading={true}
-          mode="full"
+          mode={isInitialLoad ? "full" : "overlay"}
           showBottomMenu={routeData.showBottomMenu}
           showHeader={routeData.showHeader}
-        />
-      )}
-
-      {/* Overlay Skeleton - For subsequent page loads (skip on special pages) */}
-      {showSkeleton && !isInitialLoad && !isAddonsPage(currentUrl) && (
-        <SkeletonLoader
-          isLoading={true}
-          mode="overlay"
         />
       )}
 
